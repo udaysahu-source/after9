@@ -1,0 +1,309 @@
+@import "tailwindcss" source(none);
+@source "../src";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+/*
+ * Design system definition.
+ *
+ * The @theme inline block maps CSS custom properties to Tailwind utility
+ * classes (e.g. --color-primary -> bg-primary, text-primary).
+ *
+ * The :root and .dark blocks define the actual color values using oklch.
+ * All colors MUST use oklch format.
+ *
+ * To add a new semantic color:
+ * 1. Add the variable to :root (light value) and .dark (dark value)
+ * 2. Register it in @theme inline as --color-<name>: var(--<name>)
+ */
+
+@theme inline {
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
+  --radius-3xl: calc(var(--radius) + 12px);
+  --radius-4xl: calc(var(--radius) + 16px);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-action: var(--action);
+  --color-action-foreground: var(--action-foreground);
+  --color-rose: var(--rose);
+  --color-teal: var(--teal);
+  --font-display: "Syne", sans-serif;
+  --font-sans: "Plus Jakarta Sans", sans-serif;
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-ring-offset-background: var(--background);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+}
+
+:root {
+  --radius: 0.25rem;
+  --background: oklch(0.973 0.011 75);      /* ivory FAF5EE */
+  --foreground: oklch(0.235 0.02 350);      /* 241A20 */
+  --card: oklch(0.985 0.022 85);            /* cream FFF7E8 */
+  --card-foreground: oklch(0.235 0.02 350);
+  --popover: oklch(0.985 0.022 85);
+  --popover-foreground: oklch(0.235 0.02 350);
+  --primary: oklch(0.31 0.1 357);           /* plum 4A102B */
+  --primary-foreground: oklch(0.973 0.011 75);
+  --action: oklch(0.67 0.19 45);            /* saffron F26419 */
+  --action-foreground: oklch(0.985 0.022 85);
+  --rose: oklch(0.65 0.12 10);
+  --teal: oklch(0.52 0.07 192);
+  --secondary: oklch(0.985 0.022 85);
+  --secondary-foreground: oklch(0.31 0.1 357);
+  --muted: oklch(0.93 0.015 75);
+  --muted-foreground: oklch(0.53 0.015 350);
+  --accent: oklch(0.93 0.015 75);
+  --accent-foreground: oklch(0.31 0.1 357);
+  --destructive: oklch(0.577 0.245 27.325);
+  --destructive-foreground: oklch(0.984 0.003 247.858);
+  --border: oklch(0.9 0.016 75);
+  --input: oklch(0.9 0.016 75);
+  --ring: oklch(0.67 0.19 45);
+  --chart-1: oklch(0.67 0.19 45); --chart-2: oklch(0.52 0.07 192); --chart-3: oklch(0.31 0.1 357); --chart-4: oklch(0.65 0.12 10); --chart-5: oklch(0.53 0.015 350);
+  --sidebar: oklch(0.985 0.022 85); --sidebar-foreground: oklch(0.235 0.02 350); --sidebar-primary: oklch(0.31 0.1 357); --sidebar-primary-foreground: oklch(0.973 0.011 75); --sidebar-accent: oklch(0.93 0.015 75); --sidebar-accent-foreground: oklch(0.31 0.1 357); --sidebar-border: oklch(0.9 0.016 75); --sidebar-ring: oklch(0.67 0.19 45);
+  --scrim: linear-gradient(180deg, oklch(0.2 0.05 357 / 0) 35%, oklch(0.2 0.05 357 / 0.85) 100%);
+}
+
+@layer base {
+  * {
+    border-color: var(--color-border);
+  }
+
+  body {
+    font-family: var(--font-sans);
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+  }
+}
+
+@utility scrim { background: var(--scrim); }
+@utility font-display { font-family: var(--font-display); letter-spacing: -0.03em; }
+@utility no-scrollbar { scrollbar-width: none; &::-webkit-scrollbar { display: none; } }
+@utility pt-safe { padding-top: env(safe-area-inset-top, 0px); }
+@utility pb-safe { padding-bottom: env(safe-area-inset-bottom, 0px); }
+/* ==========================================================================
+   Motion System: Natural Deceleration Curves & Purposeful Micro-interactions
+   ========================================================================== */
+
+:root {
+  --ease-out-quint: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-out-quart: cubic-bezier(0.25, 1, 0.5, 1);
+  --ease-in-out-smooth: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Staggered entrance */
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@utility animate-rise {
+  animation: rise 0.45s var(--ease-out-quint) both;
+}
+
+/* Scale reveal */
+@keyframes scale-in {
+  from {
+    opacity: 0;
+    transform: scale(0.92);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+@utility animate-scale-in {
+  animation: scale-in 0.38s var(--ease-out-quint) both;
+}
+
+/* Subtle fade */
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@utility animate-fade-in {
+  animation: fade-in 0.25s var(--ease-out-quart) both;
+}
+
+/* Signature "CLACK" Match Celebration: Two Dandiya sticks clash */
+@keyframes clack-left {
+  0% {
+    opacity: 0;
+    transform: translate(-50px, -20px) rotate(-45deg);
+  }
+  45% {
+    opacity: 1;
+    transform: translate(2px, 0) rotate(-14deg);
+  }
+  60% {
+    transform: translate(6px, -2px) rotate(-10deg);
+  }
+  100% {
+    opacity: 1;
+    transform: translate(0, 0) rotate(-14deg);
+  }
+}
+@utility animate-clack-left {
+  animation: clack-left 0.65s var(--ease-out-quint) both;
+}
+
+@keyframes clack-right {
+  0% {
+    opacity: 0;
+    transform: translate(50px, 20px) rotate(45deg);
+  }
+  45% {
+    opacity: 1;
+    transform: translate(-2px, 0) rotate(14deg);
+  }
+  60% {
+    transform: translate(-6px, 2px) rotate(10deg);
+  }
+  100% {
+    opacity: 1;
+    transform: translate(0, 0) rotate(14deg);
+  }
+}
+@utility animate-clack-right {
+  animation: clack-right 0.65s var(--ease-out-quint) both;
+}
+
+/* Radial Clash Impact Burst */
+@keyframes clack-burst {
+  0% {
+    opacity: 0;
+    transform: scale(0.2);
+  }
+  30% {
+    opacity: 0.8;
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.6);
+  }
+}
+@utility animate-clack-burst {
+  animation: clack-burst 0.85s var(--ease-out-expo) both;
+  animation-delay: 0.22s;
+}
+
+/* CLACK Typography Stamp Slam */
+@keyframes clack-slam {
+  0% {
+    opacity: 0;
+    transform: scale(2) translateY(-14px);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(0.96) translateY(0);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+@utility animate-clack-slam {
+  animation: clack-slam 0.45s var(--ease-out-quint) both;
+  animation-delay: 0.24s;
+}
+
+/* Gentle ambient pulse for festival cards & empty states */
+@keyframes gentle-pulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.03);
+    opacity: 0.88;
+  }
+}
+@utility animate-pulse-gentle {
+  animation: gentle-pulse 3s var(--ease-in-out-smooth) infinite;
+}
+
+/* Input / Validation Error Shake */
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  20%, 60% { transform: translateX(-5px); }
+  40%, 80% { transform: translateX(5px); }
+}
+@utility animate-shake {
+  animation: shake 0.32s ease-in-out;
+}
+
+/* Dandiya stamp badge reveal during card drag */
+@keyframes stamp-pop {
+  0% {
+    opacity: 0;
+    transform: scale(0.8) rotate(-4deg);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) rotate(-4deg);
+  }
+}
+@utility animate-stamp-pop {
+  animation: stamp-pop 0.18s var(--ease-out-quint) both;
+}
+
+/* Tactile touch button feedback */
+.touch-tactile {
+  transition: transform 0.12s var(--ease-out-quint), box-shadow 0.12s ease;
+  will-change: transform;
+}
+.touch-tactile:active {
+  transform: scale(0.96);
+}
+
+/* Accessibility: strictly honor prefers-reduced-motion */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+

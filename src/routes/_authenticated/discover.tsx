@@ -104,8 +104,9 @@ function Discover() {
     loadDiscoveryData();
 
     // Real-time synchronization: when new users register, onboard, or nights change
+    const channelTopic = `discover_live_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
     const channel = supabase
-      .channel("discover_live_inventory")
+      .channel(channelTopic)
       .on("postgres_changes", { event: "*", schema: "public", table: "profiles" }, () => {
         loadDiscoveryData();
       })

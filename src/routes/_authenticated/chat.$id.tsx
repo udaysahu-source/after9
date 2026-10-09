@@ -50,7 +50,8 @@ function Chat() {
       // Clear unread notifications for this chat
       supabase.from("notifications").update({ read: true }).eq("user_id", uid).eq("action_url", `/chat/${id}`);
     });
-    const ch = supabase.channel(`chat-${id}`)
+    const chTopic = `chat-${id}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    const ch = supabase.channel(chTopic)
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "messages" }, (pl) => {
         const m = pl.new as Msg;
         if ((m.sender_id === id && m.recipient_id === uid) || (m.sender_id === uid && m.recipient_id === id))

@@ -60,9 +60,11 @@ export function NotificationBell({
     if (!userId) return;
     loadData();
 
-    // Subscribe to Realtime notifications for instant in-app update
+    // Use unique channel topic per component instance so rapid navigations, React StrictMode,
+    // or route transitions never attempt to attach callbacks to an already-subscribed channel
+    const channelTopic = `notifications-${userId}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
     const channel = supabase
-      .channel(`notifications-${userId}`)
+      .channel(channelTopic)
       .on(
         "postgres_changes",
         {

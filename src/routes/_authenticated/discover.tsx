@@ -27,6 +27,7 @@ import {
 } from "@/components/discovery-states";
 import { Analytics } from "@/lib/launch-analytics";
 import { toast } from "sonner";
+import { NotificationBell } from "@/components/notifications-popover";
 
 export const Route = createFileRoute("/_authenticated/discover")({
   head: () => ({
@@ -250,11 +251,12 @@ function Discover() {
   return (
     <Shell maxWidth="wide">
       <header className="mx-auto flex w-full max-w-md md:max-w-4xl lg:max-w-5xl items-center justify-between px-5 pb-3 pt-5">
-        <div className="flex items-center gap-2 animate-rise">
+        <div className="flex items-center gap-2">
           <AppIcon className="h-8 w-8" />
           <Wordmark className="text-2xl text-primary" />
         </div>
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-2">
+          <NotificationBell userId={me?.id} />
           <button
             type="button"
             onClick={() => setInviteModalOpen(true)}

@@ -26,59 +26,71 @@ export type ProfileCardData = {
   prompt: string | null;
   nights: number[];
   shareUrl: string;
+  city?: string | null;
+  generalArea?: string | null;
 };
 
-// Brand Colors
-const THEMES: Record<
+// Curated Palettes: Deep plum, royal maroon, warm cream/ivory, and warm saffron accents
+export const THEMES: Record<
   CardTheme,
   {
     bgGradStart: string;
     bgGradEnd: string;
     accent: string;
+    accentWarm: string;
     textPrimary: string;
     textSecondary: string;
+    textMuted: string;
     cardBorder: string;
     tagBg: string;
+    photoBorder: string;
   }
 > = {
   plum: {
-    bgGradStart: "#2A1428",
-    bgGradEnd: "#140816",
-    accent: "#E8963C",
-    textPrimary: "#FAF5EE",
-    textSecondary: "rgba(250, 245, 238, 0.78)",
-    cardBorder: "rgba(232, 150, 60, 0.35)",
-    tagBg: "rgba(232, 150, 60, 0.15)",
+    bgGradStart: "#260E27", // Royal deep plum
+    bgGradEnd: "#120514",   // Velvet midnight
+    accent: "#FF9E3B",      // Subtle festive saffron
+    accentWarm: "#F3D5A5",  // Warm candlelight gold
+    textPrimary: "#FAF4EA", // Warm rich ivory
+    textSecondary: "rgba(250, 244, 234, 0.85)",
+    textMuted: "rgba(250, 244, 234, 0.65)",
+    cardBorder: "rgba(255, 158, 59, 0.28)",
+    tagBg: "rgba(255, 158, 59, 0.16)",
+    photoBorder: "rgba(250, 244, 234, 0.18)",
   },
   saffron: {
-    bgGradStart: "#4A1806",
-    bgGradEnd: "#200A02",
-    accent: "#F26419",
-    textPrimary: "#FFF9F2",
-    textSecondary: "rgba(255, 249, 242, 0.8)",
-    cardBorder: "rgba(242, 100, 25, 0.4)",
-    tagBg: "rgba(242, 100, 25, 0.2)",
+    bgGradStart: "#381108", // Rich terracotta maroon
+    bgGradEnd: "#170402",   // Deep spiced plum
+    accent: "#FFA726",      // Warm glowing saffron
+    accentWarm: "#FFE2B3",  // Cream glow
+    textPrimary: "#FFF9F2", // Pure warm cream
+    textSecondary: "rgba(255, 249, 242, 0.88)",
+    textMuted: "rgba(255, 249, 242, 0.65)",
+    cardBorder: "rgba(255, 167, 38, 0.32)",
+    tagBg: "rgba(255, 167, 38, 0.18)",
+    photoBorder: "rgba(255, 167, 38, 0.25)",
   },
   midnight: {
-    bgGradStart: "#151518",
-    bgGradEnd: "#0A0A0C",
-    accent: "#E59866",
+    bgGradStart: "#160918", // Nocturnal plum-slate
+    bgGradEnd: "#080209",   // Pure dark velvet
+    accent: "#F2B880",      // Soft champagne saffron
+    accentWarm: "#FDF4E7",  // Ivory
     textPrimary: "#FFFFFF",
-    textSecondary: "rgba(255, 255, 255, 0.72)",
-    cardBorder: "rgba(255, 255, 255, 0.25)",
-    tagBg: "rgba(255, 255, 255, 0.1)",
+    textSecondary: "rgba(255, 255, 255, 0.82)",
+    textMuted: "rgba(255, 255, 255, 0.60)",
+    cardBorder: "rgba(255, 255, 255, 0.22)",
+    tagBg: "rgba(255, 255, 255, 0.10)",
+    photoBorder: "rgba(255, 255, 255, 0.15)",
   },
 };
-
-const ROSE = "#E2547A";
 
 async function loadFonts() {
   if (typeof document === "undefined" || !("fonts" in document)) return;
   try {
     await Promise.race([
       Promise.all([
-        document.fonts.load('800 96px Syne'),
-        document.fonts.load('700 48px Syne'),
+        document.fonts.load("800 96px Syne"),
+        document.fonts.load("700 48px Syne"),
         document.fonts.load('600 40px "Plus Jakarta Sans"'),
         document.fonts.load('500 36px "Plus Jakarta Sans"'),
         document.fonts.ready,
@@ -100,7 +112,7 @@ async function loadImgSafe(src: string): Promise<HTMLImageElement | null> {
         done = true;
         resolve(null);
       }
-    }, 1500);
+    }, 2000);
 
     const finish = (result: HTMLImageElement | null) => {
       if (!done) {
@@ -114,7 +126,6 @@ async function loadImgSafe(src: string): Promise<HTMLImageElement | null> {
     img.crossOrigin = "anonymous";
     img.onload = () => finish(img);
     img.onerror = async () => {
-      // Fallback: try fetching as blob to bypass canvas tainting
       try {
         const res = await fetch(src, { mode: "cors" });
         if (!res.ok) throw new Error("fetch failed");
@@ -155,23 +166,6 @@ function roundRect(
   ctx.closePath();
 }
 
-/** Dandiya stroke marks */
-function drawMarks(ctx: CanvasRenderingContext2D, x: number, y: number, s: number, color = ROSE) {
-  ctx.save();
-  ctx.strokeStyle = color;
-  ctx.lineCap = "round";
-  ctx.lineWidth = s * 0.14;
-  ctx.beginPath();
-  ctx.moveTo(x, y + s * 0.5);
-  ctx.lineTo(x + s, y - s * 0.2);
-  ctx.stroke();
-  ctx.beginPath();
-  ctx.moveTo(x + s * 0.35, y + s * 1.05);
-  ctx.lineTo(x + s * 1.35, y + s * 0.35);
-  ctx.stroke();
-  ctx.restore();
-}
-
 function wrapText(ctx: CanvasRenderingContext2D, text: string, maxW: number): string[] {
   const words = text.split(/\s+/);
   const lines: string[] = [];
@@ -185,6 +179,41 @@ function wrapText(ctx: CanvasRenderingContext2D, text: string, maxW: number): st
   }
   if (line) lines.push(line);
   return lines;
+}
+
+/** Compute actual availability copy based on profile attendance dates */
+function getGarbaAvailabilityText(d: ProfileCardData): {
+  headline: string;
+  pillText: string | null;
+} {
+  const count = d.nights?.length ?? 0;
+  if (count === 9) {
+    return {
+      headline: "I'm in for Garba every night.",
+      pillText: "All 9 Garba Nights",
+    };
+  }
+  if (count > 0) {
+    return {
+      headline: "I'm in for Garba tonight.",
+      pillText: `${count} ${count === 1 ? "Night" : "Nights"} on the floor`,
+    };
+  }
+  return {
+    headline: "Looking for Garba plans.",
+    pillText: null,
+  };
+}
+
+/** Formats the user's location cleanly */
+function getLocationText(d: ProfileCardData): string {
+  if (d.generalArea && d.city) {
+    return `📍 ${d.generalArea}, ${d.city}`;
+  }
+  if (d.generalArea) {
+    return `📍 ${d.generalArea}`;
+  }
+  return `📍 ${d.city || "Raipur"}`;
 }
 
 /** Renders the card into the given canvas at exact 1080 × 1920 */
@@ -223,29 +252,43 @@ export async function renderCardToCanvas(
   }
 }
 
-/** Template 1: EDITORIAL (High-fashion, full-bleed portrait with gradient fade and bold display typography) */
+/**
+ * Template 1: EDITORIAL
+ * Stylish, youthful festive invitation with full-bleed photo centerpiece,
+ * clear Garba availability, location, and elegant typography.
+ */
 async function renderEditorialTemplate(
   ctx: CanvasRenderingContext2D,
   W: number,
   H: number,
   d: ProfileCardData,
   c: CardCustomization,
-  theme: typeof THEMES.plum,
+  theme: (typeof THEMES)["plum"],
   icon: HTMLImageElement | null,
   photo: HTMLImageElement | null
 ) {
-  // Safe margins for Story interfaces:
-  // Top: 140px safe zone
-  // Bottom: 220px safe zone
+  // Safe Story margins:
+  // Top header: Y ~ 140px
+  // Photo box: Y = 210 to Y = 1270 (height: 1060px)
+  const px = 64;
+  const py = 210;
+  const pw = W - px * 2; // 952px
+  const ph = 1060;
 
-  // Photo Box: Full width with subtle margin
-  const px = 60,
-    py = 140,
-    pw = W - 120,
-    ph = 1140;
+  // 1. Top Section — "GARBA PLANS?" Header Tag
+  ctx.textAlign = "left";
+  ctx.fillStyle = theme.accent;
+  ctx.font = '800 32px "Plus Jakarta Sans", sans-serif';
+  ctx.fillText("GARBA PLANS?", px + 4, py - 40);
 
+  ctx.textAlign = "right";
+  ctx.fillStyle = theme.textMuted;
+  ctx.font = '600 24px "Plus Jakarta Sans", sans-serif';
+  ctx.fillText("NAVRATRI 2026", W - px - 4, py - 40);
+
+  // 2. Large Photo Centerpiece
   ctx.save();
-  roundRect(ctx, px, py, pw, ph, 40);
+  roundRect(ctx, px, py, pw, ph, 42);
   ctx.clip();
 
   if (photo) {
@@ -253,7 +296,6 @@ async function renderEditorialTemplate(
     const dw = photo.width * scale;
     const dh = photo.height * scale;
 
-    // Apply focal point Y offset
     const focalRatio = Math.max(0, Math.min(100, c.focalY)) / 100;
     const overflowY = dh - ph;
     const dy = py - overflowY * focalRatio;
@@ -261,159 +303,160 @@ async function renderEditorialTemplate(
 
     ctx.drawImage(photo, dx, dy, dw, dh);
   } else {
-    ctx.fillStyle = "#261329";
+    // Elegant warm photo placeholder with initial
+    ctx.fillStyle = "#2A102A";
     ctx.fillRect(px, py, pw, ph);
-    ctx.fillStyle = theme.textPrimary;
-    ctx.font = '800 240px Syne, sans-serif';
+    ctx.fillStyle = theme.accentWarm;
+    ctx.font = "800 240px Syne, sans-serif";
     ctx.textAlign = "center";
     ctx.fillText((d.name || "A").slice(0, 1).toUpperCase(), W / 2, py + ph / 2 + 80);
   }
 
-  // Cinematic dark fade scrim at bottom of photo
-  const fade = ctx.createLinearGradient(0, py + ph - 420, 0, py + ph);
-  fade.addColorStop(0, "rgba(20,8,22,0)");
-  fade.addColorStop(0.65, "rgba(20,8,22,0.85)");
-  fade.addColorStop(1, "rgba(20,8,22,0.98)");
-  ctx.fillStyle = fade;
-  ctx.fillRect(px, py + ph - 420, pw, 420);
+  // Smooth dark fade scrim at bottom of photo for text contrast
+  const scrim = ctx.createLinearGradient(0, py + ph - 440, 0, py + ph);
+  scrim.addColorStop(0, "rgba(18, 5, 20, 0)");
+  scrim.addColorStop(0.5, "rgba(18, 5, 20, 0.75)");
+  scrim.addColorStop(1, "rgba(18, 5, 20, 0.98)");
+  ctx.fillStyle = scrim;
+  ctx.fillRect(px, py + ph - 440, pw, 440);
   ctx.restore();
 
-  // Top Bar: Story Header Tag
-  ctx.textAlign = "left";
-  ctx.fillStyle = theme.accent;
-  ctx.font = '700 28px "Plus Jakarta Sans", sans-serif';
-  ctx.letterSpacing = "4px";
-  ctx.fillText("AFTER9 FESTIVAL PASS", px + 10, py - 30);
+  // Subtle border around photo
+  ctx.strokeStyle = theme.photoBorder;
+  ctx.lineWidth = 2.5;
+  roundRect(ctx, px, py, pw, ph, 42);
+  ctx.stroke();
 
-  ctx.textAlign = "right";
-  ctx.fillStyle = theme.textSecondary;
-  ctx.font = '600 26px "Plus Jakarta Sans", sans-serif';
-  ctx.fillText("NAVRATRI '26 · RAIPUR", W - px - 10, py - 30);
-
-  // Name & Age over photo fade
+  // 3. Name & Age (rendered on photo scrim)
   ctx.textAlign = "left";
   ctx.fillStyle = theme.textPrimary;
-
-  // Dynamic font sizing for long names
   const displayName = `${d.name}${d.age ? `, ${d.age}` : ""}`;
-  let nameFontSize = 92;
-  ctx.font = `800 ${nameFontSize}px Syne, sans-serif`;
-  while (ctx.measureText(displayName).width > pw - 80 && nameFontSize > 56) {
-    nameFontSize -= 4;
-    ctx.font = `800 ${nameFontSize}px Syne, sans-serif`;
+  let nameSize = 88;
+  ctx.font = `800 ${nameSize}px Syne, sans-serif`;
+  while (ctx.measureText(displayName).width > pw - 80 && nameSize > 52) {
+    nameSize -= 4;
+    ctx.font = `800 ${nameSize}px Syne, sans-serif`;
   }
   ctx.fillText(displayName, px + 44, py + ph - 130);
 
-  // College & Branch
+  // College or subline on photo (if enabled)
   if (c.showCollege && d.college) {
-    ctx.fillStyle = theme.accent;
-    ctx.font = '600 36px "Plus Jakarta Sans", sans-serif';
+    ctx.fillStyle = theme.accentWarm;
+    ctx.font = '600 32px "Plus Jakarta Sans", sans-serif';
     const collegeLine = `${d.college}${d.branch ? ` · ${d.branch}` : ""}`;
-    ctx.fillText(collegeLine, px + 44, py + ph - 65);
+    const truncatedCollege =
+      ctx.measureText(collegeLine).width > pw - 88
+        ? collegeLine.slice(0, 36) + "…"
+        : collegeLine;
+    ctx.fillText(truncatedCollege, px + 44, py + ph - 70);
   }
 
-  // Bottom Content Section:
-  let curY = py + ph + 80;
+  // 4. Content Below Photo
+  let curY = py + ph + 68;
 
-  // Personality Prompt
+  // Garba Availability Headline: "I'm in for Garba tonight."
+  const avail = getGarbaAvailabilityText(d);
+  ctx.fillStyle = theme.textPrimary;
+  ctx.font = '700 48px "Plus Jakarta Sans", sans-serif';
+  ctx.fillText(avail.headline, px + 8, curY);
+  curY += 58;
+
+  // Location Tag: 📍 Raipur
+  ctx.fillStyle = theme.accent;
+  ctx.font = '600 34px "Plus Jakarta Sans", sans-serif';
+  ctx.fillText(getLocationText(d), px + 8, curY);
+  curY += 54;
+
+  // Personality Prompt (if enabled)
   if (c.showPrompt && d.prompt) {
-    ctx.fillStyle = theme.textPrimary;
-    ctx.font = 'italic 500 44px "Plus Jakarta Sans", sans-serif';
-    const lines = wrapText(ctx, `“${d.prompt}”`, W - 160).slice(0, 2);
-    for (const l of lines) {
-      ctx.fillText(l, px + 10, curY);
-      curY += 60;
+    ctx.fillStyle = theme.textSecondary;
+    ctx.font = 'italic 500 36px "Plus Jakarta Sans", sans-serif';
+    const promptLines = wrapText(ctx, `“${d.prompt}”`, pw - 20).slice(0, 2);
+    for (const l of promptLines) {
+      ctx.fillText(l, px + 8, curY);
+      curY += 46;
     }
-    curY += 20;
+    curY += 10;
   }
 
-  // Attendance Nights Chips
-  if (c.showNights && d.nights.length > 0) {
-    ctx.fillStyle = theme.tagBg;
-    const tagH = 54;
-    const nightText = `💃 Attending ${d.nights.length} of 9 Garba Nights`;
-    ctx.font = '700 28px "Plus Jakarta Sans", sans-serif';
-    const tagW = ctx.measureText(nightText).width + 50;
+  // Memorable Callout / Vibe Note
+  ctx.fillStyle = theme.accentWarm;
+  ctx.font = '600 34px "Plus Jakarta Sans", sans-serif';
+  ctx.fillText("Let's make tonight memorable ✨", px + 8, curY);
+  curY += 50;
 
-    roundRect(ctx, px + 10, curY, tagW, tagH, 27);
-    ctx.fill();
-    ctx.strokeStyle = theme.cardBorder;
-    ctx.lineWidth = 2;
-    ctx.stroke();
-
-    ctx.fillStyle = theme.accent;
-    ctx.fillText(nightText, px + 35, curY + 37);
-
-    curY += tagH + 30;
-  }
-
-  // Optional Social Handle Badge
+  // Social Handle Pill (if enabled)
   if (c.showSocials && c.selectedSocial?.handle) {
     const handleText = `${c.selectedSocial.handle}`;
-    ctx.fillStyle = "rgba(255, 255, 255, 0.08)";
     ctx.font = '600 28px "Plus Jakarta Sans", sans-serif';
-    const tagW = ctx.measureText(handleText).width + 60;
-    roundRect(ctx, px + 10, curY, tagW, 52, 26);
+    const pillW = ctx.measureText(handleText).width + 56;
+    const pillH = 50;
+    roundRect(ctx, px + 8, curY, pillW, pillH, 25);
+    ctx.fillStyle = "rgba(255, 255, 255, 0.08)";
     ctx.fill();
+    ctx.strokeStyle = theme.cardBorder;
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
 
     ctx.fillStyle = theme.textPrimary;
-    ctx.fillText(handleText, px + 40, curY + 36);
+    ctx.fillText(handleText, px + 36, curY + 35);
   }
 
-  // Story Footer Watermark:
-  const footerY = H - 180;
+  // 5. Clean Editorial Footer
+  const footerY = H - 160;
   if (icon) {
     ctx.save();
-    roundRect(ctx, px + 10, footerY, 74, 74, 20);
+    roundRect(ctx, px + 8, footerY, 60, 60, 16);
     ctx.clip();
-    ctx.drawImage(icon, px + 10, footerY, 74, 74);
+    ctx.drawImage(icon, px + 8, footerY, 60, 60);
     ctx.restore();
   }
 
+  ctx.textAlign = "left";
   ctx.fillStyle = theme.textPrimary;
-  ctx.font = '800 42px Syne, sans-serif';
-  ctx.fillText("AFTER9", px + 105, footerY + 52);
+  ctx.font = "800 38px Syne, sans-serif";
+  ctx.fillText("AFTER9", px + (icon ? 84 : 8), footerY + 44);
 
   ctx.textAlign = "right";
   ctx.fillStyle = theme.accent;
-  ctx.font = '600 26px "Plus Jakarta Sans", sans-serif';
-  ctx.fillText("meet on the floor · stay after", W - px - 10, footerY + 50);
-
-  drawMarks(ctx, W - px - 120, footerY - 45, 50, theme.accent);
+  ctx.font = '600 28px "Plus Jakarta Sans", sans-serif';
+  ctx.fillText("Meet on the floor", W - px - 8, footerY + 44);
 }
 
-/** Template 2: MINIMAL (Warm ivory/plum framing, refined portrait, understated elegance) */
+/**
+ * Template 2: MINIMAL
+ * Refined framing, centered portrait, elegant whitespace, warm plum-gold palette.
+ */
 async function renderMinimalTemplate(
   ctx: CanvasRenderingContext2D,
   W: number,
   H: number,
   d: ProfileCardData,
   c: CardCustomization,
-  theme: typeof THEMES.plum,
+  theme: (typeof THEMES)["plum"],
   icon: HTMLImageElement | null,
   photo: HTMLImageElement | null
 ) {
-  const px = 90,
-    py = 170,
-    pw = W - 180,
-    ph = 1040;
-
-  // Subtle Outer Border Frame
+  // Outer delicate frame
   ctx.strokeStyle = theme.cardBorder;
-  ctx.lineWidth = 3;
-  roundRect(ctx, 60, 100, W - 120, H - 240, 48);
+  ctx.lineWidth = 2;
+  roundRect(ctx, 50, 100, W - 100, H - 200, 44);
   ctx.stroke();
 
-  // Header
+  // Top Title
   ctx.textAlign = "center";
   ctx.fillStyle = theme.accent;
-  ctx.font = '700 26px "Plus Jakarta Sans", sans-serif';
-  ctx.letterSpacing = "6px";
-  ctx.fillText("AFTER9 · NAVRATRI 2026", W / 2, 145);
+  ctx.font = '800 28px "Plus Jakarta Sans", sans-serif';
+  ctx.fillText("GARBA PLANS?", W / 2, 160);
 
-  // Photo frame
+  // Centered Photo Box
+  const px = 100;
+  const py = 210;
+  const pw = W - px * 2; // 880px
+  const ph = 980;
+
   ctx.save();
-  roundRect(ctx, px, py, pw, ph, 36);
+  roundRect(ctx, px, py, pw, ph, 38);
   ctx.clip();
 
   if (photo) {
@@ -426,18 +469,18 @@ async function renderMinimalTemplate(
     const dx = px + (pw - dw) / 2;
     ctx.drawImage(photo, dx, dy, dw, dh);
   } else {
-    ctx.fillStyle = "#261329";
+    ctx.fillStyle = "#250F26";
     ctx.fillRect(px, py, pw, ph);
-    ctx.fillStyle = theme.textPrimary;
-    ctx.font = '800 220px Syne, sans-serif';
+    ctx.fillStyle = theme.accentWarm;
+    ctx.font = "800 220px Syne, sans-serif";
     ctx.fillText((d.name || "A").slice(0, 1).toUpperCase(), W / 2, py + ph / 2 + 75);
   }
   ctx.restore();
 
-  // Subtle border around photo
-  ctx.strokeStyle = "rgba(255, 255, 255, 0.15)";
+  // Thin photo outline
+  ctx.strokeStyle = theme.photoBorder;
   ctx.lineWidth = 2;
-  roundRect(ctx, px, py, pw, ph, 36);
+  roundRect(ctx, px, py, pw, ph, 38);
   ctx.stroke();
 
   let curY = py + ph + 85;
@@ -446,90 +489,92 @@ async function renderMinimalTemplate(
   ctx.textAlign = "center";
   ctx.fillStyle = theme.textPrimary;
   const displayName = `${d.name}${d.age ? `, ${d.age}` : ""}`;
-  let nameSize = 88;
+  let nameSize = 84;
   ctx.font = `800 ${nameSize}px Syne, sans-serif`;
-  while (ctx.measureText(displayName).width > W - 220 && nameSize > 54) {
+  while (ctx.measureText(displayName).width > pw - 80 && nameSize > 50) {
     nameSize -= 4;
     ctx.font = `800 ${nameSize}px Syne, sans-serif`;
   }
   ctx.fillText(displayName, W / 2, curY);
-  curY += 56;
+  curY += 60;
 
-  // College
-  if (c.showCollege && d.college) {
-    ctx.fillStyle = theme.textSecondary;
-    ctx.font = '500 34px "Plus Jakarta Sans", sans-serif';
-    ctx.fillText(`${d.college}${d.branch ? ` · ${d.branch}` : ""}`, W / 2, curY);
-    curY += 56;
-  }
+  // Garba Availability Headline
+  const avail = getGarbaAvailabilityText(d);
+  ctx.fillStyle = theme.accentWarm;
+  ctx.font = 'italic 600 42px "Plus Jakarta Sans", sans-serif';
+  ctx.fillText(avail.headline, W / 2, curY);
+  curY += 54;
 
-  // Prompt
+  // Location
+  ctx.fillStyle = theme.accent;
+  ctx.font = '600 32px "Plus Jakarta Sans", sans-serif';
+  ctx.fillText(getLocationText(d), W / 2, curY);
+  curY += 52;
+
+  // Prompt (if enabled)
   if (c.showPrompt && d.prompt) {
-    curY += 15;
-    ctx.fillStyle = theme.accent;
-    ctx.font = 'italic 500 40px "Plus Jakarta Sans", sans-serif';
-    const lines = wrapText(ctx, `“${d.prompt}”`, W - 280).slice(0, 2);
+    ctx.fillStyle = theme.textSecondary;
+    ctx.font = 'italic 500 34px "Plus Jakarta Sans", sans-serif';
+    const lines = wrapText(ctx, `“${d.prompt}”`, pw - 60).slice(0, 2);
     for (const l of lines) {
       ctx.fillText(l, W / 2, curY);
-      curY += 54;
+      curY += 46;
     }
+    curY += 8;
   }
 
-  // Attendance
-  if (c.showNights && d.nights.length > 0) {
-    curY += 20;
-    ctx.fillStyle = theme.textSecondary;
-    ctx.font = '600 28px "Plus Jakarta Sans", sans-serif';
-    ctx.fillText(`✨ Dancing on ${d.nights.length} Nights`, W / 2, curY);
-    curY += 45;
-  }
+  // Vibe Statement
+  ctx.fillStyle = theme.textPrimary;
+  ctx.font = '600 32px "Plus Jakarta Sans", sans-serif';
+  ctx.fillText("Let's make tonight memorable ✨", W / 2, curY);
+  curY += 50;
 
-  // Social
+  // Social handle
   if (c.showSocials && c.selectedSocial?.handle) {
-    ctx.fillStyle = theme.textPrimary;
-    ctx.font = '700 26px "Plus Jakarta Sans", sans-serif';
+    ctx.fillStyle = theme.accentWarm;
+    ctx.font = '600 28px "Plus Jakarta Sans", sans-serif';
     ctx.fillText(`${c.selectedSocial.handle}`, W / 2, curY);
   }
 
-  // Bottom Branding
-  ctx.fillStyle = theme.textSecondary;
-  ctx.font = '600 22px "Plus Jakarta Sans", sans-serif';
-  ctx.fillText("after9.in", W / 2, H - 170);
+  // Footer
+  const footerY = H - 150;
+  ctx.fillStyle = theme.textMuted;
+  ctx.font = '700 28px "Plus Jakarta Sans", sans-serif';
+  ctx.fillText("AFTER9 · Meet on the floor", W / 2, footerY);
 }
 
-/** Template 3: FESTIVAL (Warm saffron & terracotta glow, dandiya clack marks, vibrant festival atmosphere) */
+/**
+ * Template 3: FESTIVAL
+ * Warm celebratory radiance, subtle festive glow, bold festive status badge.
+ */
 async function renderFestivalTemplate(
   ctx: CanvasRenderingContext2D,
   W: number,
   H: number,
   d: ProfileCardData,
   c: CardCustomization,
-  theme: typeof THEMES.plum,
+  theme: (typeof THEMES)["plum"],
   icon: HTMLImageElement | null,
   photo: HTMLImageElement | null
 ) {
-  // Festive Radial Glow in Background
-  const glow = ctx.createRadialGradient(W / 2, 600, 50, W / 2, 600, 600);
-  glow.addColorStop(0, "rgba(242, 100, 25, 0.25)");
-  glow.addColorStop(1, "rgba(242, 100, 25, 0)");
+  // Soft ambient radial glow
+  const glow = ctx.createRadialGradient(W / 2, 600, 60, W / 2, 600, 650);
+  glow.addColorStop(0, "rgba(255, 158, 59, 0.22)");
+  glow.addColorStop(0.7, "rgba(224, 90, 50, 0.08)");
+  glow.addColorStop(1, "rgba(38, 14, 39, 0)");
   ctx.fillStyle = glow;
   ctx.fillRect(0, 0, W, H);
 
-  // Festive Motion Marks in background corners
-  drawMarks(ctx, 80, 100, 80, "rgba(242, 100, 25, 0.5)");
-  drawMarks(ctx, W - 180, 120, 80, "rgba(226, 84, 122, 0.5)");
+  // Top Tag
+  const px = 64;
+  const py = 200;
+  const pw = W - px * 2;
+  const ph = 1040;
 
-  const px = 70,
-    py = 180,
-    pw = W - 140,
-    ph = 1100;
-
-  // Header Ribbon
   ctx.textAlign = "center";
   ctx.fillStyle = theme.accent;
-  ctx.font = '800 32px Syne, sans-serif';
-  ctx.letterSpacing = "5px";
-  ctx.fillText("NINE NIGHTS OF DANCE", W / 2, 130);
+  ctx.font = "800 34px Syne, sans-serif";
+  ctx.fillText("GARBA PLANS?", W / 2, 145);
 
   // Photo
   ctx.save();
@@ -546,24 +591,24 @@ async function renderFestivalTemplate(
     const dx = px + (pw - dw) / 2;
     ctx.drawImage(photo, dx, dy, dw, dh);
   } else {
-    ctx.fillStyle = "#38180A";
+    ctx.fillStyle = "#33121D";
     ctx.fillRect(px, py, pw, ph);
-    ctx.fillStyle = theme.textPrimary;
-    ctx.font = '800 240px Syne, sans-serif';
+    ctx.fillStyle = theme.accentWarm;
+    ctx.font = "800 240px Syne, sans-serif";
     ctx.fillText((d.name || "A").slice(0, 1).toUpperCase(), W / 2, py + ph / 2 + 80);
   }
 
-  // Warm saffron/plum fade
+  // Bottom photo fade
   const fade = ctx.createLinearGradient(0, py + ph - 420, 0, py + ph);
-  fade.addColorStop(0, "rgba(36,10,2,0)");
-  fade.addColorStop(0.7, "rgba(36,10,2,0.85)");
-  fade.addColorStop(1, "rgba(36,10,2,0.98)");
+  fade.addColorStop(0, "rgba(25, 6, 20, 0)");
+  fade.addColorStop(0.6, "rgba(25, 6, 20, 0.82)");
+  fade.addColorStop(1, "rgba(25, 6, 20, 0.98)");
   ctx.fillStyle = fade;
   ctx.fillRect(px, py + ph - 420, pw, 420);
   ctx.restore();
 
-  // Photo border in saffron
-  ctx.strokeStyle = "rgba(242, 100, 25, 0.4)";
+  // Subtle festive photo border
+  ctx.strokeStyle = theme.cardBorder;
   ctx.lineWidth = 3;
   roundRect(ctx, px, py, pw, ph, 44);
   ctx.stroke();
@@ -572,9 +617,9 @@ async function renderFestivalTemplate(
   ctx.textAlign = "left";
   ctx.fillStyle = theme.textPrimary;
   const displayName = `${d.name}${d.age ? `, ${d.age}` : ""}`;
-  let nameSize = 92;
+  let nameSize = 90;
   ctx.font = `800 ${nameSize}px Syne, sans-serif`;
-  while (ctx.measureText(displayName).width > pw - 80 && nameSize > 56) {
+  while (ctx.measureText(displayName).width > pw - 80 && nameSize > 52) {
     nameSize -= 4;
     ctx.font = `800 ${nameSize}px Syne, sans-serif`;
   }
@@ -582,67 +627,72 @@ async function renderFestivalTemplate(
 
   if (c.showCollege && d.college) {
     ctx.fillStyle = theme.accent;
-    ctx.font = '600 36px "Plus Jakarta Sans", sans-serif';
-    ctx.fillText(`${d.college}${d.branch ? ` · ${d.branch}` : ""}`, px + 44, py + ph - 65);
+    ctx.font = '600 34px "Plus Jakarta Sans", sans-serif';
+    ctx.fillText(`${d.college}${d.branch ? ` · ${d.branch}` : ""}`, px + 44, py + ph - 68);
   }
 
-  // Bottom Festival Information
-  let curY = py + ph + 85;
+  // Bottom Festival Section
+  let curY = py + ph + 70;
 
+  // Availability Headline
+  const avail = getGarbaAvailabilityText(d);
+  ctx.fillStyle = theme.textPrimary;
+  ctx.font = '700 48px "Plus Jakarta Sans", sans-serif';
+  ctx.fillText(avail.headline, px + 8, curY);
+  curY += 58;
+
+  // Location
+  ctx.fillStyle = theme.accent;
+  ctx.font = '600 34px "Plus Jakarta Sans", sans-serif';
+  ctx.fillText(getLocationText(d), px + 8, curY);
+  curY += 54;
+
+  // Prompt (if enabled)
   if (c.showPrompt && d.prompt) {
-    ctx.fillStyle = theme.textPrimary;
-    ctx.font = 'italic 500 42px "Plus Jakarta Sans", sans-serif';
-    const lines = wrapText(ctx, `“${d.prompt}”`, W - 180).slice(0, 2);
+    ctx.fillStyle = theme.textSecondary;
+    ctx.font = 'italic 500 36px "Plus Jakarta Sans", sans-serif';
+    const lines = wrapText(ctx, `“${d.prompt}”`, pw - 20).slice(0, 2);
     for (const l of lines) {
-      ctx.fillText(l, px + 20, curY);
-      curY += 58;
+      ctx.fillText(l, px + 8, curY);
+      curY += 46;
     }
-    curY += 20;
+    curY += 10;
   }
 
-  // Festive Nights Row
-  if (c.showNights && d.nights.length > 0) {
-    ctx.fillStyle = "rgba(242, 100, 25, 0.18)";
-    const pillH = 58;
-    const pillText = `🎉 ${d.nights.length} Nights on the Floor`;
-    ctx.font = '700 28px "Plus Jakarta Sans", sans-serif';
-    const pillW = ctx.measureText(pillText).width + 60;
+  // Vibe Line
+  ctx.fillStyle = theme.accentWarm;
+  ctx.font = '600 34px "Plus Jakarta Sans", sans-serif';
+  ctx.fillText("Let's make tonight memorable ✨", px + 8, curY);
+  curY += 52;
 
-    roundRect(ctx, px + 20, curY, pillW, pillH, 29);
+  // Attendance Nights Chip (if enabled)
+  if (c.showNights && avail.pillText) {
+    ctx.font = '700 28px "Plus Jakarta Sans", sans-serif';
+    const chipText = `💃 ${avail.pillText}`;
+    const chipW = ctx.measureText(chipText).width + 60;
+    const chipH = 50;
+
+    roundRect(ctx, px + 8, curY, chipW, chipH, 25);
+    ctx.fillStyle = theme.tagBg;
     ctx.fill();
-    ctx.strokeStyle = "rgba(242, 100, 25, 0.5)";
-    ctx.lineWidth = 2;
+    ctx.strokeStyle = theme.cardBorder;
+    ctx.lineWidth = 1.5;
     ctx.stroke();
 
     ctx.fillStyle = theme.accent;
-    ctx.fillText(pillText, px + 50, curY + 40);
-
-    // Social chip next to it if space permits
-    if (c.showSocials && c.selectedSocial?.handle) {
-      const sText = `${c.selectedSocial.handle}`;
-      const sW = ctx.measureText(sText).width + 50;
-      const sX = px + 35 + pillW;
-      if (sX + sW < W - px) {
-        ctx.fillStyle = "rgba(255, 255, 255, 0.1)";
-        roundRect(ctx, sX, curY, sW, pillH, 29);
-        ctx.fill();
-        ctx.fillStyle = theme.textPrimary;
-        ctx.fillText(sText, sX + 25, curY + 40);
-      }
-    }
+    ctx.fillText(chipText, px + 36, curY + 35);
   }
 
-  // Footer: After9 Festive Mark
-  const footerY = H - 180;
+  // Footer: After9
+  const footerY = H - 160;
   ctx.textAlign = "center";
   ctx.fillStyle = theme.textPrimary;
-  ctx.font = '800 48px Syne, sans-serif';
-  ctx.fillText("AFTER9", W / 2, footerY + 30);
+  ctx.font = "800 44px Syne, sans-serif";
+  ctx.fillText("AFTER9", W / 2, footerY + 20);
 
   ctx.fillStyle = theme.accent;
-  ctx.font = '600 24px "Plus Jakarta Sans", sans-serif';
-  ctx.letterSpacing = "3px";
-  ctx.fillText("MEET ON THE FLOOR · STAY AFTER", W / 2, footerY + 70);
+  ctx.font = '600 26px "Plus Jakarta Sans", sans-serif';
+  ctx.fillText("MEET ON THE FLOOR", W / 2, footerY + 60);
 }
 
 /** Render card directly to Blob */
@@ -653,66 +703,105 @@ export async function renderCardToBlob(
   const canvas = document.createElement("canvas");
   await renderCardToCanvas(canvas, d, c);
   return new Promise<Blob>((resolve, reject) => {
-    canvas.toBlob((blob) => {
-      if (blob) resolve(blob);
-      else reject(new Error("Canvas blob rendering failed"));
-    }, "image/png", 0.95);
+    canvas.toBlob(
+      (blob) => {
+        if (blob) resolve(blob);
+        else reject(new Error("Canvas blob rendering failed"));
+      },
+      "image/png",
+      0.95
+    );
   });
 }
 
-/** Legacy support: Square invite card */
+/** Legacy wrapper */
+export async function drawProfileCard(d: ProfileCardData): Promise<"shared" | "downloaded"> {
+  const blob = await renderCardToBlob(d, {
+    template: "editorial",
+    theme: "plum",
+    focalY: 50,
+    showCollege: !!d.college,
+    showPrompt: !!d.prompt,
+    showNights: d.nights.length > 0,
+    showSocials: false,
+  });
+
+  const file = new File([blob], `after9-${d.name.toLowerCase()}-card.png`, {
+    type: "image/png",
+  });
+  if (navigator.canShare?.({ files: [file] })) {
+    try {
+      await navigator.share({
+        files: [file],
+        title: `${d.name}'s After9 Garba Card`,
+        text: `Find me on After9 — ${d.shareUrl}`,
+      });
+      return "shared";
+    } catch {
+      /* fallback to download */
+    }
+  }
+
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `after9-${d.name.toLowerCase()}-card.png`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 10_000);
+  return "downloaded";
+}
+
+/** Legacy support: Invite card generator */
 export async function drawInviteCard(code: string, url: string): Promise<"shared" | "downloaded"> {
   await loadFonts();
-  const W = 1080,
-    H = 1350;
+  const W = 1080;
+  const H = 1350;
   const canvas = document.createElement("canvas");
   canvas.width = W;
   canvas.height = H;
   const ctx = canvas.getContext("2d")!;
 
   const g = ctx.createLinearGradient(0, 0, 0, H);
-  g.addColorStop(0, "#2A1B2E");
-  g.addColorStop(1, "#1E1222");
+  g.addColorStop(0, "#260E27");
+  g.addColorStop(1, "#120514");
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, W, H);
 
   const icon = await loadImgSafe(appIcon);
-  drawMarks(ctx, W - 260, 120, 110);
 
   if (icon) {
-    const s = 300;
+    const s = 280;
     ctx.save();
-    roundRect(ctx, (W - s) / 2, 190, s, s, 72);
+    roundRect(ctx, (W - s) / 2, 180, s, s, 64);
     ctx.clip();
-    ctx.drawImage(icon, (W - s) / 2, 190, s, s);
+    ctx.drawImage(icon, (W - s) / 2, 180, s, s);
     ctx.restore();
   }
 
   ctx.textAlign = "center";
-  ctx.fillStyle = "#F3E9D2";
-  ctx.font = '800 120px Syne, sans-serif';
-  ctx.fillText("AFTER9", W / 2, 640);
+  ctx.fillStyle = "#FAF4EA";
+  ctx.font = "800 110px Syne, sans-serif";
+  ctx.fillText("AFTER9", W / 2, 600);
 
-  ctx.fillStyle = "#E8963C";
-  ctx.font = '600 44px "Plus Jakarta Sans", sans-serif';
-  ctx.fillText("Meet on the floor. Stay after.", W / 2, 720);
+  ctx.fillStyle = "#FF9E3B";
+  ctx.font = '600 40px "Plus Jakarta Sans", sans-serif';
+  ctx.fillText("Meet on the floor. Stay after.", W / 2, 680);
 
   // Code pill
-  ctx.font = '800 88px Syne, sans-serif';
+  ctx.font = "800 84px Syne, sans-serif";
   const codeW = ctx.measureText(code).width + 140;
-  roundRect(ctx, (W - codeW) / 2, 810, codeW, 160, 80);
-  ctx.strokeStyle = "#E8963C";
-  ctx.lineWidth = 5;
+  roundRect(ctx, (W - codeW) / 2, 770, codeW, 150, 75);
+  ctx.strokeStyle = "#FF9E3B";
+  ctx.lineWidth = 4;
   ctx.stroke();
-  ctx.fillStyle = "#F3E9D2";
-  ctx.fillText(code, W / 2, 920);
+  ctx.fillStyle = "#FAF4EA";
+  ctx.fillText(code, W / 2, 875);
 
-  ctx.fillStyle = "rgba(243,233,210,0.75)";
-  ctx.font = '500 40px "Plus Jakarta Sans", sans-serif';
-  ctx.fillText("Join me with this code — skip the photo check", W / 2, 1080);
-  ctx.fillStyle = "#E8963C";
-  ctx.font = '600 44px "Plus Jakarta Sans", sans-serif';
-  ctx.fillText(url.replace(/^https?:\/\//, "").replace(/[&]src=card$/, ""), W / 2, 1160);
+  ctx.fillStyle = "rgba(250, 244, 234, 0.75)";
+  ctx.font = '500 36px "Plus Jakarta Sans", sans-serif';
+  ctx.fillText("Join me on After9 for Navratri", W / 2, 1020);
+  ctx.fillStyle = "#FF9E3B";
+  ctx.font = '600 40px "Plus Jakarta Sans", sans-serif';
+  ctx.fillText(url.replace(/^https?:\/\//, "").replace(/[&]src=card$/, ""), W / 2, 1090);
 
   const blob = await new Promise<Blob | null>((r) => canvas.toBlob(r, "image/png"));
   if (!blob) throw new Error("Couldn't create the image.");
@@ -739,36 +828,3 @@ export async function drawInviteCard(code: string, url: string): Promise<"shared
   return "downloaded";
 }
 
-/** Legacy wrapper */
-export async function drawProfileCard(d: ProfileCardData): Promise<"shared" | "downloaded"> {
-  const blob = await renderCardToBlob(d, {
-    template: "editorial",
-    theme: "plum",
-    focalY: 50,
-    showCollege: !!d.college,
-    showPrompt: !!d.prompt,
-    showNights: d.nights.length > 0,
-    showSocials: false,
-  });
-
-  const file = new File([blob], `after9-${d.name.toLowerCase()}-card.png`, { type: "image/png" });
-  if (navigator.canShare?.({ files: [file] })) {
-    try {
-      await navigator.share({
-        files: [file],
-        title: `${d.name}'s After9 Card`,
-        text: `Find me on After9 — ${d.shareUrl}`,
-      });
-      return "shared";
-    } catch {
-      /* fallback */
-    }
-  }
-
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = `after9-${d.name.toLowerCase()}-card.png`;
-  a.click();
-  setTimeout(() => URL.revokeObjectURL(a.href), 10_000);
-  return "downloaded";
-}

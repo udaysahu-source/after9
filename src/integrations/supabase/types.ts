@@ -299,6 +299,7 @@ export type Database = {
           quiz: Json
           card_preferences: Json | null
           public_profile_enabled: boolean
+          push_notifications_enabled: boolean
           share_token: string
           show_college: boolean
           updated_at: string
@@ -327,6 +328,7 @@ export type Database = {
           photo_path?: string | null
           prompt?: string | null
           public_profile_enabled?: boolean
+          push_notifications_enabled?: boolean
           quiz?: Json
           share_token?: string
           show_college?: boolean
@@ -357,6 +359,7 @@ export type Database = {
           photo_path?: string | null
           prompt?: string | null
           public_profile_enabled?: boolean
+          push_notifications_enabled?: boolean
           quiz?: Json
           share_token?: string
           show_college?: boolean
@@ -419,11 +422,104 @@ export type Database = {
           },
         ]
       }
+      notifications: {
+        Row: {
+          action_url: string
+          body: string
+          created_at: string
+          data: Json
+          id: string
+          read: boolean
+          source_id: string | null
+          title: string
+          type: "like" | "match" | "message" | "system"
+          user_id: string
+        }
+        Insert: {
+          action_url?: string
+          body: string
+          created_at?: string
+          data?: Json
+          id?: string
+          read?: boolean
+          source_id?: string | null
+          title: string
+          type: "like" | "match" | "message" | "system"
+          user_id: string
+        }
+        Update: {
+          action_url?: string
+          body?: string
+          created_at?: string
+          data?: Json
+          id?: string
+          read?: boolean
+          source_id?: string | null
+          title?: string
+          type?: "like" | "match" | "message" | "system"
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notifications_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      push_subscriptions: {
+        Row: {
+          auth: string
+          created_at: string
+          endpoint: string
+          id: string
+          p256dh: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          auth: string
+          created_at?: string
+          endpoint: string
+          id?: string
+          p256dh: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          auth?: string
+          created_at?: string
+          endpoint?: string
+          id?: string
+          p256dh?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "push_subscriptions_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
+      mark_all_notifications_read: {
+        Args: Record<PropertyKey, never>
+        Returns: undefined
+      }
+      get_unread_notification_count: {
+        Args: Record<PropertyKey, never>
+        Returns: number
+      }
       floor_ratio: {
         Args: Record<PropertyKey, never>
         Returns: {

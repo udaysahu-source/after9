@@ -127,4 +127,36 @@ describe("Share Cards Engine (1080 × 1920)", () => {
     expect(mockCanvas.width).toBe(1080);
     expect(mockCanvas.height).toBe(1920);
   });
+
+  it("renders Garba plans headline, location, and festive hierarchy", async () => {
+    await renderCardToCanvas(
+      mockCanvas,
+      {
+        ...sampleData,
+        generalArea: "Telibandha",
+        city: "Raipur",
+      },
+      sampleCustomization
+    );
+    const textCalls = (mockContext.fillText as any).mock.calls.map((c: any[]) => c[0]);
+    expect(textCalls).toContain("GARBA PLANS?");
+    expect(textCalls).toContain("I'm in for Garba tonight.");
+    expect(textCalls).toContain("📍 Telibandha, Raipur");
+    expect(textCalls).toContain("Let's make tonight memorable ✨");
+  });
+
+  it("handles zero attendance without falsely claiming availability", async () => {
+    await renderCardToCanvas(
+      mockCanvas,
+      {
+        ...sampleData,
+        nights: [],
+        city: "Raipur",
+      },
+      sampleCustomization
+    );
+    const textCalls = (mockContext.fillText as any).mock.calls.map((c: any[]) => c[0]);
+    expect(textCalls).toContain("Looking for Garba plans.");
+    expect(textCalls).not.toContain("I'm in for Garba tonight.");
+  });
 });

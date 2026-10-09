@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#4A102B" />
+  <title>Offline — After9</title>
+  <style>
+    :root {
+      --bg: #120514;
+      --card: #200A22;
+      --primary: #FAF4EA;
+      --accent: #FF9E3B;
+      --muted: rgba(250, 244, 234, 0.7);
+      --border: rgba(255, 158, 59, 0.2);
+    }
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    body {
+      background-color: var(--bg);
+      color: var(--primary);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      text-align: center;
+    }
+    .container {
+      max-width: 420px;
+      width: 100%;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 28px;
+      padding: 36px 24px;
+      box-shadow: 0 16px 48px rgba(0, 0, 0, 0.4);
+    }
+    .icon {
+      font-size: 54px;
+      margin-bottom: 16px;
+      display: inline-block;
+    }
+    h1 {
+      font-size: 26px;
+      font-weight: 800;
+      letter-spacing: -0.5px;
+      margin-bottom: 10px;
+      color: var(--primary);
+    }
+    p {
+      font-size: 15px;
+      line-height: 1.5;
+      color: var(--muted);
+      margin-bottom: 24px;
+    }
+    .info-box {
+      background: rgba(255, 158, 59, 0.08);
+      border: 1px dashed var(--border);
+      border-radius: 14px;
+      padding: 12px 16px;
+      font-size: 13px;
+      color: var(--accent);
+      margin-bottom: 24px;
+    }
+    .btn {
+      display: inline-block;
+      width: 100%;
+      background: var(--accent);
+      color: #120514;
+      font-weight: 700;
+      font-size: 16px;
+      padding: 14px 20px;
+      border-radius: 9999px;
+      border: none;
+      cursor: pointer;
+      text-decoration: none;
+      transition: opacity 0.2s, transform 0.1s;
+    }
+    .btn:active {
+      transform: scale(0.98);
+      opacity: 0.9;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="icon">✨</div>
+    <h1>You're Offline</h1>
+    <p>After9 requires an active internet connection for real-time discovery, clashes, and chats.</p>
+    <div class="info-box">
+      Check your mobile data or Wi-Fi to continue connecting on the Garba floor.
+    </div>
+    <button class="btn" onclick="window.location.reload()">Retry Connection</button>
+  </div>
+</body>
+</html>

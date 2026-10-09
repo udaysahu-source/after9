@@ -55,6 +55,7 @@ const mockProfile: ProfileRow = {
   verification_reason: null,
   visibility_audiences: ["college", "nearby"],
   general_area: "Telibandha",
+  push_notifications_enabled: true,
   share_token: "aarav_xyz",
   card_preferences: null,
   created_at: "2026-10-01T00:00:00Z",

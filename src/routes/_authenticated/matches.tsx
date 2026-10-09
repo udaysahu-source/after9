@@ -4,6 +4,7 @@ import { BottomNav, Btn, ChatIcon, Dandiya, Shell } from "@/components/after9";
 import { supabase } from "@/integrations/supabase/client";
 import { usePhotoUrls, type FeedRow } from "@/lib/after9";
 import type { Database } from "@/integrations/supabase/types";
+import { NotificationBell } from "@/components/notifications-popover";
 
 type Match = Database["public"]["Functions"]["my_matches"]["Returns"][number];
 
@@ -23,20 +24,38 @@ export const Route = createFileRoute("/_authenticated/matches")({
 
 function Matches() {
   const [list, setList] = useState<Match[] | null>(null);
-  useEffect(() => { supabase.rpc("my_matches").then(({ data }) => setList(data ?? [])); }, []);
+  const [me, setMe] = useState<string>("");
+
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => {
+      if (data.user) setMe(data.user.id);
+    });
+    supabase.rpc("my_matches").then(({ data }) => setList(data ?? []));
+  }, []);
+
   const urls = usePhotoUrls((list ?? []).map((m) => m.photo_path));
   return (
     <Shell maxWidth="wide">
-      <div className="animate-rise px-5 pb-2 pt-6 md:pt-10 flex flex-col md:flex-row md:items-baseline md:justify-between gap-1">
-        <div>
-          <h1 className="font-display text-4xl font-extrabold text-primary tracking-tight">Chats</h1>
-          <p className="mt-1 text-sm text-muted-foreground">Everyone you clashed with. Tap to keep talking.</p>
+      <div className="px-5 pb-2 pt-6 md:pt-10 flex flex-col md:flex-row md:items-baseline md:justify-between gap-2">
+        <div className="flex items-center justify-between w-full md:w-auto">
+          <div>
+            <h1 className="font-display text-4xl font-extrabold text-primary tracking-tight">Chats</h1>
+            <p className="mt-1 text-sm text-muted-foreground">Everyone you clashed with. Tap to keep talking.</p>
+          </div>
+          <div className="md:hidden">
+            <NotificationBell userId={me} />
+          </div>
         </div>
-        {list && list.length > 0 && (
-          <span className="text-xs font-semibold tracking-wider uppercase text-action">
-            {list.length} {list.length === 1 ? "Clash" : "Clashes"} on the floor
-          </span>
-        )}
+        <div className="flex items-center gap-3">
+          <div className="hidden md:block">
+            <NotificationBell userId={me} />
+          </div>
+          {list && list.length > 0 && (
+            <span className="text-xs font-semibold tracking-wider uppercase text-action">
+              {list.length} {list.length === 1 ? "Clash" : "Clashes"} on the floor
+            </span>
+          )}
+        </div>
       </div>
 
       <main className="flex-1 pb-24 md:pb-28">

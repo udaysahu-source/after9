@@ -47,6 +47,8 @@ function Chat() {
       // Load matched socials guarded by database-level mutual consent
       const { data: socs } = await supabase.rpc("get_matched_socials", { target_user_id: id });
       setMatchedSocials((socs ?? []) as { platform: string; handle: string; profile_url: string }[]);
+      // Clear unread notifications for this chat
+      supabase.from("notifications").update({ read: true }).eq("user_id", uid).eq("action_url", `/chat/${id}`);
     });
     const ch = supabase.channel(`chat-${id}`)
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "messages" }, (pl) => {

@@ -47,6 +47,9 @@ import { ShareCardStudio } from "@/components/share-card-studio";
 import { SocialLinksManager } from "@/components/social-links-manager";
 import { ProfileVisibilityMeter } from "@/components/profile-visibility-meter";
 import { getMySocialLinks, type SocialLinkRow } from "@/lib/social-links";
+import { NotificationBell } from "@/components/notifications-popover";
+import { PWAInstallCard } from "@/components/pwa-install-button";
+import { NotificationSettings } from "@/components/notification-settings";
 
 export const Route = createFileRoute("/_authenticated/profile")({
   head: () => ({
@@ -137,36 +140,41 @@ function Profile() {
   return (
     <Shell maxWidth="wide">
       <main className="flex-1 pb-24 md:pb-28">
-        <div className="flex items-end gap-4 px-5 pt-6 md:pt-10">
-          <button
-            onClick={() => setPanel("photo")}
-            className="h-28 w-21 shrink-0 overflow-hidden rounded-xs bg-muted shadow-xs transition-transform hover:scale-105"
-            aria-label="Change photo"
-          >
-            {p.photo_path && urls[p.photo_path] && (
-              <img src={urls[p.photo_path]} alt="You" className="h-full w-full object-cover" />
-            )}
-          </button>
-          <div>
-            <h1 className="font-display text-3xl font-extrabold text-primary md:text-4xl">
-              {p.first_name}
-              {p.birth_date ? `, ${ageFrom(p.birth_date)}` : ""}
-            </h1>
-            <p className="text-sm text-muted-foreground">
-              {p.college}
-              {p.branch ? ` · ${p.branch}` : ""}
-            </p>
-            <p className="mt-1 text-sm font-semibold text-teal">
-              {goingNights(p.nights).length} of 9 nights
-            </p>
+        <div className="flex items-end justify-between px-5 pt-6 md:pt-10">
+          <div className="flex items-end gap-4">
             <button
-              type="button"
-              onClick={() => setCardStudioOpen(true)}
-              className="mt-2 inline-flex items-center gap-1.5 text-sm font-semibold text-action transition hover:underline"
+              onClick={() => setPanel("photo")}
+              className="h-28 w-21 shrink-0 overflow-hidden rounded-xs bg-muted shadow-xs transition-transform hover:scale-105"
+              aria-label="Change photo"
             >
-              <Sparkles className="h-3.5 w-3.5" />
-              Customize & Share card ↗
+              {p.photo_path && urls[p.photo_path] && (
+                <img src={urls[p.photo_path]} alt="You" className="h-full w-full object-cover" />
+              )}
             </button>
+            <div>
+              <h1 className="font-display text-3xl font-extrabold text-primary md:text-4xl">
+                {p.first_name}
+                {p.birth_date ? `, ${ageFrom(p.birth_date)}` : ""}
+              </h1>
+              <p className="text-sm text-muted-foreground">
+                {p.college}
+                {p.branch ? ` · ${p.branch}` : ""}
+              </p>
+              <p className="mt-1 text-sm font-semibold text-teal">
+                {goingNights(p.nights).length} of 9 nights
+              </p>
+              <button
+                type="button"
+                onClick={() => setCardStudioOpen(true)}
+                className="mt-2 inline-flex items-center gap-1.5 text-sm font-semibold text-action transition hover:underline"
+              >
+                <Sparkles className="h-3.5 w-3.5" />
+                Customize & Share card ↗
+              </button>
+            </div>
+          </div>
+          <div className="mb-2">
+            <NotificationBell userId={p.id} />
           </div>
         </div>
 
@@ -339,6 +347,15 @@ function Profile() {
               />
               <BlockedList userId={p.id} />
             </Section>
+
+            <Section title="APP & NOTIFICATIONS">
+              <PWAInstallCard />
+              <NotificationSettings
+                userId={p.id}
+                enabled={p.push_notifications_enabled ?? true}
+                onUpdate={recheck}
+              />
+            </Section>
           </div>
         </div>
       </main>
@@ -357,6 +374,8 @@ function Profile() {
           prompt: p.prompt ?? null,
           nights: goingNights(p.nights),
           shareUrl: `${typeof window !== "undefined" ? window.location.origin : ""}/p/${p.share_token}`,
+          city: "Raipur",
+          generalArea: p.general_area ?? null,
         }}
         socialLinks={socials}
         savedPreferences={(p.card_preferences as Partial<CardCustomization> | null) ?? null}

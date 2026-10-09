@@ -329,3 +329,129 @@ export function PhotoPicker({ userId, url, onUploaded, onRemove }: { userId: str
     </div>
   );
 }
+
+export function CompactAgeRangePicker({
+  minAge,
+  maxAge,
+  onChange,
+}: {
+  minAge: number;
+  maxAge: number;
+  onChange: (min: number, max: number) => void;
+}) {
+  const min = Math.max(18, minAge || 18);
+  const max = Math.max(min, maxAge || 35);
+
+  const setMin = (val: number) => {
+    const clamped = Math.max(18, Math.min(val, max));
+    onChange(clamped, max);
+  };
+
+  const setMax = (val: number) => {
+    const clamped = Math.max(min, Math.min(val, 55));
+    onChange(min, clamped);
+  };
+
+  const presets = [
+    { label: "18 – 24 (Campus)", min: 18, max: 24 },
+    { label: "21 – 28 (Young Pros)", min: 21, max: 28 },
+    { label: "18 – 35 (Standard)", min: 18, max: 35 },
+  ];
+
+  return (
+    <div className="space-y-4">
+      {/* Visual range preview pill */}
+      <div className="rounded-2xl border border-action/30 bg-action/5 p-4 text-center">
+        <span className="text-[11px] font-bold uppercase tracking-wider text-action">
+          Selected Discovery Span
+        </span>
+        <h3 className="font-display text-2xl font-extrabold text-primary mt-0.5">
+          {min} – {max} years old
+        </h3>
+        <p className="text-[11px] text-muted-foreground mt-1">
+          Server-enforced: Only eligible adults aged 18+ can join or appear.
+        </p>
+      </div>
+
+      {/* Two compact controls */}
+      <div className="grid grid-cols-2 gap-3">
+        {/* Min Age Stepper */}
+        <div className="rounded-xl border border-border bg-card p-3 space-y-2">
+          <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground block text-center">
+            Minimum Age (18+)
+          </span>
+          <div className="flex items-center justify-between">
+            <button
+              type="button"
+              disabled={min <= 18}
+              onClick={() => setMin(min - 1)}
+              className="h-9 w-9 rounded-lg border border-border bg-background text-base font-bold text-foreground hover:bg-muted disabled:opacity-30 transition flex items-center justify-center"
+            >
+              −
+            </button>
+            <span className="font-mono text-xl font-extrabold text-primary">{min}</span>
+            <button
+              type="button"
+              disabled={min >= max}
+              onClick={() => setMin(min + 1)}
+              className="h-9 w-9 rounded-lg border border-border bg-background text-base font-bold text-foreground hover:bg-muted disabled:opacity-30 transition flex items-center justify-center"
+            >
+              +
+            </button>
+          </div>
+        </div>
+
+        {/* Max Age Stepper */}
+        <div className="rounded-xl border border-border bg-card p-3 space-y-2">
+          <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground block text-center">
+            Maximum Age
+          </span>
+          <div className="flex items-center justify-between">
+            <button
+              type="button"
+              disabled={max <= min}
+              onClick={() => setMax(max - 1)}
+              className="h-9 w-9 rounded-lg border border-border bg-background text-base font-bold text-foreground hover:bg-muted disabled:opacity-30 transition flex items-center justify-center"
+            >
+              −
+            </button>
+            <span className="font-mono text-xl font-extrabold text-primary">{max}</span>
+            <button
+              type="button"
+              disabled={max >= 55}
+              onClick={() => setMax(max + 1)}
+              className="h-9 w-9 rounded-lg border border-border bg-background text-base font-bold text-foreground hover:bg-muted disabled:opacity-30 transition flex items-center justify-center"
+            >
+              +
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Quick Presets */}
+      <div className="space-y-1.5 pt-1">
+        <span className="text-[11px] font-semibold text-muted-foreground">Quick age presets:</span>
+        <div className="flex flex-wrap gap-2">
+          {presets.map((p) => {
+            const active = min === p.min && max === p.max;
+            return (
+              <button
+                key={p.label}
+                type="button"
+                onClick={() => onChange(p.min, p.max)}
+                className={cn(
+                  "rounded-lg px-2.5 py-1 text-xs font-semibold border transition",
+                  active
+                    ? "border-primary bg-primary text-primary-foreground"
+                    : "border-border bg-card text-foreground hover:border-primary/50",
+                )}
+              >
+                {p.label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}

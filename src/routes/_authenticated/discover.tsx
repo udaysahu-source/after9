@@ -60,19 +60,20 @@ function Discover() {
   const [socials, setSocials] = useState<SocialLinkRow[]>([]);
 
   useEffect(() => {
-    if (me) setHidden(!!(me as { incognito?: boolean }).incognito);
+    if (me) setHidden(!me.discoverable);
   }, [me]);
 
   const toggleHidden = async () => {
     if (!me) return;
-    const v = !hidden;
-    setHidden(v);
-    await supabase.from("profiles").update({ incognito: v }).eq("id", me.id);
+    const nextHidden = !hidden;
+    setHidden(nextHidden);
+    await supabase.from("profiles").update({ discoverable: !nextHidden }).eq("id", me.id);
     setNote(
-      v
-        ? "Private mode on — only people you send a Dandiya to can see you."
-        : "Private mode off — you're visible on Discover again.",
+      nextHidden
+        ? "Hide me from Discover is ON — you're immediately hidden from new discovery results."
+        : "Hide me from Discover is OFF — you're discoverable by your chosen audience.",
     );
+    loadDiscoveryData();
   };
 
   const loadDiscoveryData = useCallback(async () => {
@@ -295,25 +296,25 @@ function Discover() {
             </button>
           </div>
 
-          {/* Private mode switch */}
+          {/* Hide me from Discover switch */}
           <button
             onClick={toggleHidden}
             aria-pressed={!!hidden}
             className="touch-tactile flex min-h-[56px] w-full items-center justify-between rounded-xl border border-border bg-card px-3.5 py-2.5 text-left text-sm transition-all hover:border-primary/40 active:scale-[0.99]"
           >
             <span className="min-w-0 pr-2">
-              <b>Private mode</b>
+              <b>Hide me from Discover</b>
               <br />
               <span className="text-xs text-muted-foreground block truncate">
                 {hidden
-                  ? "Only people you send a Dandiya to see you"
-                  : "Everyone matching your filters can see you"}
+                  ? "Your profile is hidden from new discovery results"
+                  : "Discoverable by your chosen audience"}
               </span>
             </span>
             <span
               className={cn(
                 "relative h-6 w-11 shrink-0 rounded-full transition-colors duration-200",
-                hidden ? "bg-primary" : "bg-muted",
+                hidden ? "bg-action" : "bg-muted",
               )}
             >
               <span
@@ -325,6 +326,18 @@ function Discover() {
             </span>
           </button>
         </div>
+
+        {me &&
+          ((me as any).visibility_audiences?.includes("only_me") ||
+            !(me as any).visibility_audiences?.length) && (
+            <Link
+              to="/profile"
+              className="animate-scale-in mb-3 block w-full rounded-sm border-l-2 border-action bg-card px-3 py-2 text-sm transition-opacity hover:opacity-85"
+            >
+              <b>Discovery set to Only Me.</b> Your profile will not appear on Discover until you
+              choose an audience. Tap to change →
+            </Link>
+          )}
 
         {note && (
           <button

@@ -133,3 +133,122 @@ export function useMyProfile() {
   };
   return { p, loading, save, reload: load };
 }
+
+export type VisibilityAudience = "only_me" | "college" | "nearby" | "event";
+
+export const VISIBILITY_OPTIONS = [
+  {
+    id: "only_me" as VisibilityAudience,
+    title: "Only Me",
+    subtitle: "My profile is hidden from discovery.",
+    audienceType: "private",
+    meterLevel: 1,
+  },
+  {
+    id: "college" as VisibilityAudience,
+    title: "My College",
+    subtitle: "Discoverable by eligible users from my college.",
+    audienceType: "limited",
+    meterLevel: 2,
+  },
+  {
+    id: "nearby" as VisibilityAudience,
+    title: "Nearby",
+    subtitle: "Discoverable by eligible users in my selected general area.",
+    audienceType: "limited",
+    meterLevel: 2,
+  },
+  {
+    id: "event" as VisibilityAudience,
+    title: "Event Community",
+    subtitle: "Discoverable by eligible users participating in the same supported festival community or event.",
+    audienceType: "wider",
+    meterLevel: 3,
+  },
+] as const;
+
+export const COARSE_AREAS = [
+  "Telibandha / VIP Road",
+  "Shankar Nagar / Civil Lines",
+  "Pandri / Devendra Nagar",
+  "Samta Colony / Choubey Colony",
+  "Tatibandh / GE Road",
+  "Bhilai / Durg",
+  "Naya Raipur",
+  "Raipur Central",
+] as const;
+
+export const POPULAR_COLLEGES = [
+  "SSIPMT Raipur",
+  "NIT Raipur",
+  "HNLU Raipur",
+  "AIIMS Raipur",
+  "IIT Bhilai",
+  "BIT Durg",
+  "Rungta Bhilai",
+  "Govt Engineering College Raipur",
+  "Pt. Ravishankar Shukla University",
+] as const;
+
+export function getPrivacyMeterStatus(audiences: string[] = []): {
+  level: 1 | 2 | 3;
+  label: "More private" | "Limited audience" | "Wider audience";
+  description: string;
+} {
+  if (!audiences || audiences.length === 0 || audiences.includes("only_me")) {
+    return {
+      level: 1,
+      label: "More private",
+      description: "My profile is hidden from discovery.",
+    };
+  }
+
+  // If only college OR only nearby is selected
+  if (audiences.length === 1 && (audiences.includes("college") || audiences.includes("nearby"))) {
+    return {
+      level: 2,
+      label: "Limited audience",
+      description: "Discoverable only within your specific campus or general neighborhood.",
+    };
+  }
+
+  // Event community or multiple audiences selected
+  return {
+    level: 3,
+    label: "Wider audience",
+    description: "Discoverable across your selected communities. Broader selections expand who may discover you.",
+  };
+}
+
+export function getPrivacyPreviewText(
+  audiences: string[] = [],
+  college?: string | null,
+  area?: string | null,
+): string {
+  if (!audiences || audiences.length === 0 || audiences.includes("only_me")) {
+    return "Your profile is hidden from discovery. You will not appear on Discover while this setting is active.";
+  }
+
+  const parts: string[] = [];
+  if (audiences.includes("college")) {
+    parts.push(college ? `your selected college community (${college})` : "your selected college community");
+  }
+  if (audiences.includes("nearby")) {
+    parts.push(area ? `your selected general area (${area})` : "your selected general area");
+  }
+  if (audiences.includes("event")) {
+    parts.push("the same festival community");
+  }
+
+  if (parts.length === 1) {
+    if (audiences.includes("college")) {
+      return `Your profile can appear to eligible After9 users in ${parts[0]}.`;
+    }
+    if (audiences.includes("nearby")) {
+      return `Your profile can appear to eligible After9 users in ${parts[0]}.`;
+    }
+    return `Your profile can appear to eligible After9 users participating in ${parts[0]}.`;
+  }
+
+  return `Your profile can appear to eligible After9 users across ${parts.join(" and ")}. Selecting multiple audiences expands who may discover you.`;
+}

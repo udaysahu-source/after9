@@ -45,6 +45,7 @@ import {
 } from "lucide-react";
 import { ShareCardStudio } from "@/components/share-card-studio";
 import { SocialLinksManager } from "@/components/social-links-manager";
+import { ProfileVisibilityMeter } from "@/components/profile-visibility-meter";
 import { getMySocialLinks, type SocialLinkRow } from "@/lib/social-links";
 
 export const Route = createFileRoute("/_authenticated/profile")({
@@ -304,12 +305,24 @@ function Profile() {
 
             <Invites me={p} onClaimed={recheck} />
 
-            <Section title="PRIVACY">
+            <Section title="PRIVACY SETTINGS">
+              <Row
+                label="Who can discover you?"
+                value={
+                  !p.discoverable
+                    ? "Hidden from Discover"
+                    : (p as any).visibility_audiences?.includes("only_me") ||
+                        !(p as any).visibility_audiences?.length
+                      ? "Only Me · Hidden"
+                      : `${(p as any).visibility_audiences?.length} audience${(p as any).visibility_audiences?.length > 1 ? "s" : ""}`
+                }
+                onClick={() => setPanel("privacy")}
+              />
               <Toggle
-                label="Show me on Discover"
-                hint="Turn off to take a break. Your clashes stay."
-                on={p.discoverable}
-                onChange={(v) => save({ discoverable: v })}
+                label="Hide me from Discover"
+                hint="Immediately removes your profile from new discovery results."
+                on={!p.discoverable}
+                onChange={(v) => save({ discoverable: !v })}
               />
               <Toggle
                 label="Show my college"
@@ -586,6 +599,7 @@ function Editor({
     first_name: p.first_name ?? "",
     college: p.college ?? "",
     branch: p.branch ?? "",
+    general_area: (p as any).general_area ?? "",
     prompt: p.prompt ?? "",
   });
   const [photo, setPhoto] = useState<{ path: string | null; preview?: string | undefined }>({
@@ -601,17 +615,18 @@ function Editor({
     quiz: "Garba quiz",
     nights: "My nights",
     socials: "Social links",
-    privacy: "Public card & privacy",
+    privacy: "Who can discover you? · Privacy",
   }[panel];
 
   const patch: Partial<ProfileRow> =
     panel === "basics"
-      ? {
+      ? ({
           first_name: f.first_name.trim(),
-          college: f.college.trim(),
+          college: f.college.trim() || null,
           branch: f.branch.trim() || null,
+          general_area: f.general_area.trim() || null,
           prompt: f.prompt.trim(),
-        }
+        } as any)
       : panel === "photo"
         ? { photo_path: photo.path }
         : panel === "quiz"
@@ -619,7 +634,7 @@ function Editor({
           : { nights };
   const valid =
     panel === "basics"
-      ? !!(f.first_name.trim() && f.college.trim() && f.prompt.trim())
+      ? !!f.first_name.trim()
       : panel === "photo"
         ? !!photo.path
         : panel === "nights"
@@ -637,31 +652,62 @@ function Editor({
       <div className="mx-auto flex w-full max-w-xl flex-1 animate-rise flex-col gap-6 px-5 pb-6 pt-8">
         {panel === "basics" && (
           <>
-            <input
-              className={fieldInput}
-              placeholder="First name"
-              value={f.first_name}
-              onChange={(e) => setF({ ...f, first_name: e.target.value })}
-            />
-            <input
-              className={fieldInput}
-              placeholder="College"
-              value={f.college}
-              onChange={(e) => setF({ ...f, college: e.target.value })}
-            />
-            <input
-              className={fieldInput}
-              placeholder="Branch · Year (optional)"
-              value={f.branch}
-              onChange={(e) => setF({ ...f, branch: e.target.value })}
-            />
-            <input
-              className={fieldInput}
-              maxLength={70}
-              placeholder="Garba night isn't complete without…"
-              value={f.prompt}
-              onChange={(e) => setF({ ...f, prompt: e.target.value })}
-            />
+            <div>
+              <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1 block">
+                First name
+              </label>
+              <input
+                className={fieldInput}
+                placeholder="First name"
+                value={f.first_name}
+                onChange={(e) => setF({ ...f, first_name: e.target.value })}
+              />
+            </div>
+            <div>
+              <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1 block">
+                College (Optional · Can change or clear anytime)
+              </label>
+              <input
+                className={fieldInput}
+                placeholder="College"
+                value={f.college}
+                onChange={(e) => setF({ ...f, college: e.target.value })}
+              />
+            </div>
+            <div>
+              <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1 block">
+                Branch · Year (Optional)
+              </label>
+              <input
+                className={fieldInput}
+                placeholder="Branch · Year (optional)"
+                value={f.branch}
+                onChange={(e) => setF({ ...f, branch: e.target.value })}
+              />
+            </div>
+            <div>
+              <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1 block">
+                General area in Raipur (Coarse neighborhood only)
+              </label>
+              <input
+                className={fieldInput}
+                placeholder="General area (e.g., Telibandha, Shankar Nagar, Bhilai)"
+                value={f.general_area}
+                onChange={(e) => setF({ ...f, general_area: e.target.value })}
+              />
+            </div>
+            <div>
+              <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1 block">
+                Garba prompt
+              </label>
+              <input
+                className={fieldInput}
+                maxLength={70}
+                placeholder="Garba night isn't complete without…"
+                value={f.prompt}
+                onChange={(e) => setF({ ...f, prompt: e.target.value })}
+              />
+            </div>
             <p className="text-xs text-muted-foreground">
               Changing your name, prompt or photo re-checks your profile.
             </p>
@@ -698,7 +744,13 @@ function Editor({
         )}
 
         {panel === "privacy" && (
-          <PrivacyPanel p={p} onSave={onSave} onReload={onReload} onClose={onClose} />
+          <PrivacyPanel
+            p={p}
+            photoUrl={photoUrl}
+            onSave={onSave}
+            onReload={onReload}
+            onClose={onClose}
+          />
         )}
 
         {panel !== "socials" && panel !== "privacy" && (
@@ -721,19 +773,50 @@ function Editor({
 
 function PrivacyPanel({
   p,
+  photoUrl,
   onSave,
   onReload,
   onClose,
 }: {
   p: ProfileRow;
+  photoUrl?: string | undefined;
   onSave: (patch: Partial<ProfileRow>) => void;
   onReload: () => Promise<void>;
   onClose: () => void;
 }) {
+  const [audiences, setAudiences] = useState<string[]>(
+    (p as any).visibility_audiences?.length ? (p as any).visibility_audiences : ["only_me"],
+  );
+  const [college, setCollege] = useState(p.college || "");
+  const [generalArea, setGeneralArea] = useState((p as any).general_area || "");
+  const [discoverable, setDiscoverable] = useState(p.discoverable);
+
   const [publicEnabled, setPublicEnabled] = useState(p.public_profile_enabled);
   const [regenerating, setRegenerating] = useState(false);
   const [copied, setCopied] = useState(false);
   const publicUrl = `${typeof window !== "undefined" ? window.location.origin : ""}/p/${p.share_token}`;
+
+  const handleAudienceChange = (newAuds: string[]) => {
+    setAudiences(newAuds);
+    onSave({ visibility_audiences: newAuds } as any);
+    toast.success("Discovery audience updated.");
+  };
+
+  const handleCollegeChange = (c: string | null) => {
+    setCollege(c || "");
+    onSave({ college: c ? c.trim() : null });
+  };
+
+  const handleGeneralAreaChange = (a: string | null) => {
+    setGeneralArea(a || "");
+    onSave({ general_area: a ? a.trim() : null } as any);
+  };
+
+  const handleToggleDiscoverable = (disc: boolean) => {
+    setDiscoverable(disc);
+    onSave({ discoverable: disc });
+    toast.success(disc ? "Discover enabled!" : "Hidden from Discover.");
+  };
 
   const togglePublic = (enabled: boolean) => {
     setPublicEnabled(enabled);
@@ -769,14 +852,31 @@ function PrivacyPanel({
   };
 
   return (
-    <div className="flex flex-col gap-5">
-      {/* Enable toggle */}
+    <div className="flex flex-col gap-6">
+      {/* 1. Profile Visibility Meter */}
+      <ProfileVisibilityMeter
+        audiences={audiences}
+        onChangeAudiences={handleAudienceChange}
+        college={college}
+        onChangeCollege={handleCollegeChange}
+        generalArea={generalArea}
+        onChangeGeneralArea={handleGeneralAreaChange}
+        discoverable={discoverable}
+        onToggleDiscoverable={handleToggleDiscoverable}
+        userFirstName={p.first_name}
+        userAge={p.birth_date ? ageFrom(p.birth_date) : null}
+        userPhotoUrl={photoUrl}
+        userPrompt={p.prompt}
+        userNightsCount={goingNights(p.nights).length}
+      />
+
+      {/* 2. Public Profile Card */}
       <div className="rounded-2xl border border-border bg-card p-4 space-y-2">
         <div className="flex items-center justify-between">
           <div>
             <h3 className="font-display text-base font-bold text-primary">Public Profile Card</h3>
             <p className="text-xs text-muted-foreground">
-              Allow anyone with your link to view your verified card
+              Allow anyone with your secret link to view your verified card
             </p>
           </div>
           <button

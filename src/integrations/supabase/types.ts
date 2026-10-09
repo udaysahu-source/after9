@@ -277,6 +277,8 @@ export type Database = {
       profiles: {
         Row: {
           birth_date: string | null
+          visibility_audiences: string[]
+          general_area: string | null
           branch: string | null
           college: string | null
           created_at: string
@@ -312,6 +314,7 @@ export type Database = {
           discoverable?: boolean
           first_name?: string | null
           gender?: string | null
+          general_area?: string | null
           id: string
           incognito?: boolean
           interested_in?: string
@@ -330,6 +333,7 @@ export type Database = {
           updated_at?: string
           verification_reason?: string | null
           verification_status?: string
+          visibility_audiences?: string[]
         }
         Update: {
           birth_date?: string | null
@@ -340,6 +344,7 @@ export type Database = {
           discoverable?: boolean
           first_name?: string | null
           gender?: string | null
+          general_area?: string | null
           id?: string
           incognito?: boolean
           interested_in?: string
@@ -358,6 +363,7 @@ export type Database = {
           updated_at?: string
           verification_reason?: string | null
           verification_status?: string
+          visibility_audiences?: string[]
         }
         Relationships: [
           {

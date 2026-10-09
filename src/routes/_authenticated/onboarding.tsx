@@ -5,16 +5,17 @@ import { Btn, Dandiya, Shell } from "@/components/after9";
 import {
   Choice,
   IndiaBirthdayPicker,
+  CompactAgeRangePicker,
   NightsPicker,
-  OptionList,
   PhotoPicker,
   fieldInput,
 } from "@/components/profile-fields";
+import { ProfileVisibilityMeter } from "@/components/profile-visibility-meter";
 import {
   GENDERS,
   INTERESTS,
-  QUIZ,
   validateBirthDate,
+  ageFrom,
   goingNights,
   useMyProfile,
   usePhotoUrls,
@@ -31,9 +32,9 @@ export const Route = createFileRoute("/_authenticated/onboarding")({
   head: () => ({
     meta: [
       { title: "Set up your profile — After9" },
-      { name: "description", content: "A few quick steps to get on the floor." },
+      { name: "description", content: "A few quick steps to get on the festival floor." },
       { property: "og:title", content: "Set up your profile — After9" },
-      { property: "og:description", content: "A few quick steps to get on the floor." },
+      { property: "og:description", content: "A few quick steps to get on the festival floor." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
     ],
@@ -41,8 +42,15 @@ export const Route = createFileRoute("/_authenticated/onboarding")({
   component: Onboarding,
 });
 
-// 0: basics, 1: college, 2: prompt, 3: photo, 4-6: quiz×3, 7: nights, 8: socials, 9: safety, 10: tutorial
-const TOTAL = 11;
+// 7 Short, Single-Purpose Screens:
+// 0: About you (Name, Birthday, Gender)
+// 1: Who do you want to meet? (Women, Men, Everyone)
+// 2: Your age range (min_age, max_age 18+)
+// 3: Your Garba nights (calendar picker, skippable)
+// 4: Who can discover you? (Privacy meter & audiences)
+// 5: Your socials (optional handles, private by default, skippable)
+// 6: Your profile (photo + short prompt)
+const TOTAL = 7;
 
 function Onboarding() {
   const { p, save } = useMyProfile();
@@ -57,7 +65,13 @@ function Onboarding() {
     }
   }, [p?.onboarded, nav]);
 
-  if (!p) return <Shell><div /></Shell>;
+  if (!p)
+    return (
+      <Shell>
+        <div />
+      </Shell>
+    );
+
   const step = Math.min(p.onboarding_step ?? 0, TOTAL - 1);
 
   const next = async (patch: Partial<ProfileRow> = {}) => {
@@ -129,10 +143,10 @@ function H({ k, t, s }: { k: string; t: string; s?: string }) {
   return (
     <div className="mb-6 sm:mb-8">
       <p className="mb-2 text-xs font-semibold tracking-widest text-action uppercase">{k}</p>
-      <h1 className="font-display text-3xl sm:text-4xl font-extrabold leading-[1.05] text-primary">
+      <h1 className="font-display text-2xl sm:text-3xl font-extrabold leading-[1.1] text-primary">
         {t}
       </h1>
-      {s && <p className="mt-2.5 text-sm text-muted-foreground leading-relaxed">{s}</p>}
+      {s && <p className="mt-2 text-xs sm:text-sm text-muted-foreground leading-relaxed">{s}</p>}
     </div>
   );
 }
@@ -150,26 +164,35 @@ function Step({
     first_name: p.first_name ?? "",
     birth_date: p.birth_date ?? "",
     gender: p.gender ?? "",
-    interested_in: p.interested_in,
+    interested_in: p.interested_in || "everyone",
+    min_age: Math.max(18, p.min_age || 18),
+    max_age: Math.max(18, p.max_age || 35),
     college: p.college ?? "",
-    branch: p.branch ?? "",
+    general_area: (p as any).general_area ?? "",
+    visibility_audiences: (p as any).visibility_audiences?.length
+      ? (p as any).visibility_audiences
+      : ["only_me"],
     prompt: p.prompt ?? "",
   });
+
   const [photo, setPhoto] = useState<{ path: string | null; preview?: string }>({
     path: p.photo_path,
   });
   const [nights, setNights] = useState((p.nights ?? {}) as Record<string, Attendance>);
   const urls = usePhotoUrls([photo.path]);
-  const quiz = (p.quiz ?? {}) as Record<string, string>;
 
-  // Step 0: About You (First name, India Birthday, Gender, Interests)
+  // SCREEN 1 — About you: First name, Birthday, Gender
   if (step === 0) {
     const bCheck = f.birth_date ? validateBirthDate(f.birth_date) : { valid: false, age: 0 };
     const canContinue = f.first_name.trim().length > 0 && f.gender && bCheck.valid;
 
     return (
       <>
-        <H k="ABOUT YOU" t="Let's start with you." />
+        <H
+          k="ABOUT YOU"
+          t="Let's start with you."
+          s="Enter your first name and birth date to confirm you're 18+."
+        />
         <div className="flex flex-col gap-5 sm:gap-6">
           <div>
             <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1 block">
@@ -183,7 +206,6 @@ function Step({
             />
           </div>
 
-          {/* India-first DD/MM/YYYY Birthday Picker */}
           <IndiaBirthdayPicker
             value={f.birth_date}
             onChange={(iso) => setF({ ...f, birth_date: iso })}
@@ -199,17 +221,6 @@ function Step({
               onChange={(picked) => setF({ ...f, gender: picked })}
             />
           </div>
-
-          <div>
-            <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              Show me
-            </p>
-            <Choice
-              options={INTERESTS}
-              value={f.interested_in}
-              onChange={(v) => setF({ ...f, interested_in: v })}
-            />
-          </div>
         </div>
 
         <Btn
@@ -220,7 +231,6 @@ function Step({
               first_name: f.first_name.trim(),
               birth_date: f.birth_date,
               gender: f.gender,
-              interested_in: f.interested_in,
             })
           }
         >
@@ -230,125 +240,135 @@ function Step({
     );
   }
 
-  // Step 1: Campus
-  if (step === 1)
+  // SCREEN 2 — Who do you want to meet?
+  if (step === 1) {
     return (
       <>
-        <H k="CAMPUS" t="Where do you study?" s="Skip the branch if it doesn't apply." />
-        <div className="flex flex-col gap-6">
-          <input
-            className={fieldInput}
-            placeholder="College"
-            value={f.college}
-            onChange={(e) => setF({ ...f, college: e.target.value })}
-          />
-          <input
-            className={fieldInput}
-            placeholder="Branch · Year (optional)"
-            value={f.branch}
-            onChange={(e) => setF({ ...f, branch: e.target.value })}
+        <H
+          k="PREFERENCES"
+          t="Who do you want to meet?"
+          s="We will curate festival circles and dandiya clashes based on your preference."
+        />
+        <div className="flex flex-col gap-3">
+          <Choice
+            options={INTERESTS}
+            value={f.interested_in}
+            onChange={(v) => {
+              setF({ ...f, interested_in: v });
+            }}
           />
         </div>
         <Btn
-          className="mt-auto"
-          disabled={!f.college.trim()}
-          onClick={() => next({ college: f.college.trim(), branch: f.branch.trim() || null })}
+          className="mt-auto pt-6"
+          disabled={!f.interested_in}
+          onClick={() => next({ interested_in: f.interested_in })}
         >
           Continue
         </Btn>
-      </>
-    );
-
-  // Step 2: One Line Prompt
-  if (step === 2)
-    return (
-      <>
-        <H
-          k="ONE LINE"
-          t="Garba night isn't complete without…"
-          s="Keep it short. No handles or numbers."
-        />
-        <input
-          className={fieldInput}
-          maxLength={70}
-          placeholder="Kachori and rabri at 1:30 AM."
-          value={f.prompt}
-          onChange={(e) => setF({ ...f, prompt: e.target.value })}
-        />
-        <p className="mt-2 text-right text-xs text-muted-foreground">{f.prompt.length}/70</p>
-        <Btn
-          className="mt-auto"
-          disabled={f.prompt.trim().length < 3}
-          onClick={() => next({ prompt: f.prompt.trim() })}
-        >
-          Continue
-        </Btn>
-      </>
-    );
-
-  // Step 3: Photo
-  if (step === 3)
-    return (
-      <>
-        <H
-          k="PHOTO"
-          t="Show your face."
-          s="One clear, solo photo. Our checker makes sure every profile is a real person."
-        />
-        <PhotoPicker
-          userId={p.id}
-          url={photo.preview ?? (photo.path ? urls[photo.path] : undefined)}
-          onUploaded={(path, preview) => setPhoto({ path, preview })}
-        />
-        <Btn
-          className="mt-auto"
-          disabled={!photo.path}
-          onClick={() => next({ photo_path: photo.path })}
-        >
-          Looks good
-        </Btn>
-      </>
-    );
-
-  // Steps 4 to 6: Quiz
-  if (step >= 4 && step <= 6) {
-    const q = QUIZ[step - 4]!;
-    return (
-      <>
-        <H k={`GARBA QUIZ · ${step - 3} OF 3`} t={q.q} />
-        <OptionList
-          options={q.options}
-          value={quiz[q.key]}
-          onPick={(o) => next({ quiz: { ...quiz, [q.key]: o } })}
-        />
       </>
     );
   }
 
-  // Step 7: Nine Nights
-  if (step === 7)
-    return (
-      <>
-        <H k="NINE NIGHTS" t="Which nights are you out?" s="Tap to cycle: Going → Maybe → Off." />
-        <NightsPicker value={nights} onChange={setNights} />
-        <Btn
-          className="mt-auto"
-          disabled={goingNights(nights).length === 0}
-          onClick={() => next({ nights })}
-        >
-          Lock it in
-        </Btn>
-      </>
-    );
-
-  // Step 8: Your socials, your choice (Dedicated Social Handles step)
-  if (step === 8)
+  // SCREEN 3 — Your age range
+  if (step === 2) {
     return (
       <>
         <H
-          k="SOCIAL PROFILES"
+          k="AGE RANGE"
+          t="Your age range"
+          s="Select the age range of people you want to discover. After9 strictly enforces 18+ on the server."
+        />
+        <CompactAgeRangePicker
+          minAge={f.min_age}
+          maxAge={f.max_age}
+          onChange={(min, max) => setF({ ...f, min_age: min, max_age: max })}
+        />
+        <Btn
+          className="mt-auto pt-6"
+          onClick={() => next({ min_age: f.min_age, max_age: f.max_age })}
+        >
+          Continue
+        </Btn>
+      </>
+    );
+  }
+
+  // SCREEN 4 — Your Garba nights
+  if (step === 3) {
+    const goingCount = goingNights(nights).length;
+
+    return (
+      <>
+        <H
+          k="GARBA NIGHTS"
+          t="Which nights are you going?"
+          s="Tap each night to cycle: Going → Maybe → Off. You can skip if your dates are not finalized yet."
+        />
+        <NightsPicker value={nights} onChange={setNights} />
+        <div className="mt-auto pt-6 flex flex-col gap-2">
+          <Btn onClick={() => next({ nights })}>
+            {goingCount > 0 ? `Lock in ${goingCount} nights` : "Continue"}
+          </Btn>
+          <button
+            type="button"
+            onClick={() => next({ nights: {} })}
+            className="text-center text-xs font-semibold text-muted-foreground hover:text-foreground py-1 transition"
+          >
+            Skip for now (I'll decide later) →
+          </button>
+        </div>
+      </>
+    );
+  }
+
+  // SCREEN 5 — Who can discover you?
+  if (step === 4) {
+    return (
+      <>
+        <H
+          k="PRIVACY METER"
+          t="Who can discover you?"
+          s="Choose your discovery audience. New accounts default to Only Me until you choose."
+        />
+        <div className="flex-1 overflow-y-auto pr-1">
+          <ProfileVisibilityMeter
+            audiences={f.visibility_audiences}
+            onChangeAudiences={(auds) => setF({ ...f, visibility_audiences: auds })}
+            college={f.college}
+            onChangeCollege={(c) => setF({ ...f, college: c || "" })}
+            generalArea={f.general_area}
+            onChangeGeneralArea={(a) => setF({ ...f, general_area: a || "" })}
+            userFirstName={f.first_name}
+            userAge={f.birth_date ? ageFrom(f.birth_date) : 21}
+            userPhotoUrl={photo.preview ?? (photo.path ? urls[photo.path] : undefined)}
+            userPrompt={f.prompt}
+            userNightsCount={goingNights(nights).length}
+          />
+        </div>
+        <Btn
+          className="mt-auto pt-6"
+          onClick={() =>
+            next({
+              visibility_audiences: f.visibility_audiences,
+              college: f.college.trim() || null,
+              general_area: f.general_area.trim() || null,
+            } as any)
+          }
+        >
+          Continue
+        </Btn>
+      </>
+    );
+  }
+
+  // SCREEN 6 — Your socials
+  if (step === 5) {
+    return (
+      <>
+        <H
+          k="SOCIALS"
           t="Your socials, your choice"
-          s="Connect your social profiles if you want. You decide who can see them, and you can change your choices anytime."
+          s="Add your social profiles if you want. Visibility defaults to strictly private. You can skip anytime."
         />
         <div className="flex-1 overflow-y-auto pr-1">
           <SocialLinksManager userId={p.id} />
@@ -365,43 +385,55 @@ function Step({
         </div>
       </>
     );
+  }
 
-  // Step 9: Safety
-  if (step === 9)
-    return (
-      <>
-        <H k="SAFETY" t="Your floor, your rules." />
-        <ul className="flex flex-col gap-5 text-[15px]">
-          {[
-            ["Real people only.", "Every profile is checked before anyone sees it."],
-            ["Chat unlocks only on a clash.", "Nobody messages you unless you sent a Dandiya back."],
-            ["Block and report in one tap.", "From any chat or card."],
-            ["Meet in the crowd first.", "Garba grounds are public. Keep it that way at first."],
-          ].map(([a, b]) => (
-            <li key={a} className="border-l-2 border-teal pl-4">
-              <p className="font-semibold">{a}</p>
-              <p className="text-muted-foreground">{b}</p>
-            </li>
-          ))}
-        </ul>
-        <Btn className="mt-auto" onClick={() => next()}>
-          I'm in
-        </Btn>
-      </>
-    );
-
-  // Step 10: Tutorial
+  // SCREEN 7 — Your profile: Photo + short prompt
   return (
     <>
       <H
-        k="HOW IT WORKS"
-        t="Send a Dandiya."
-        s="Swipe right or tap Send Dandiya. Swipe left to pass. If they send one back — clack — it's a clash, and chat opens."
+        k="YOUR PROFILE"
+        t="Show your face & vibe"
+        s="Add a clear solo photo and one short line about your Garba night."
       />
-      <div className="flex flex-1 items-center justify-center">
-        <Dandiya className="h-32 w-32 animate-clack text-action" />
+      <div className="flex flex-col gap-6">
+        <div>
+          <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2 block">
+            Profile photo (Required for verification)
+          </label>
+          <PhotoPicker
+            userId={p.id}
+            url={photo.preview ?? (photo.path ? urls[photo.path] : undefined)}
+            onUploaded={(path, preview) => setPhoto({ path, preview })}
+          />
+        </div>
+
+        <div>
+          <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1 block">
+            Garba night isn't complete without…
+          </label>
+          <input
+            className={fieldInput}
+            maxLength={70}
+            placeholder="Kachori and rabri at 1:30 AM."
+            value={f.prompt}
+            onChange={(e) => setF({ ...f, prompt: e.target.value })}
+          />
+          <p className="mt-1 text-right text-xs text-muted-foreground">{f.prompt.length}/70</p>
+        </div>
       </div>
-      <Btn onClick={() => next()}>Start discovering</Btn>
+
+      <Btn
+        className="mt-auto pt-6"
+        disabled={!photo.path}
+        onClick={() =>
+          next({
+            photo_path: photo.path,
+            prompt: f.prompt.trim() || "Ready for Garba!",
+          })
+        }
+      >
+        Complete & Enter After9
+      </Btn>
     </>
   );
 }

@@ -1217,6 +1217,27 @@ function AccountCategory({ p }: { p: ProfileRow }) {
         <p className="text-xs text-muted-foreground">Verification: <b className="text-foreground">{p.verification_status}</b></p>
       </div>
 
+      <div className="rounded-2xl border border-primary/30 bg-primary/5 p-4 space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="text-base">👑</span>
+            <h3 className="font-display text-sm font-bold text-primary">Administrator Controls</h3>
+          </div>
+          <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-primary">
+            Protected
+          </span>
+        </div>
+        <p className="text-xs text-muted-foreground leading-relaxed">
+          Access platform metrics, user moderation, referral audits, and Discover launch control.
+        </p>
+        <Link
+          to="/admin"
+          className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-4 py-2.5 text-xs font-bold text-primary-foreground shadow-xs transition hover:opacity-90"
+        >
+          Open Admin Control Center →
+        </Link>
+      </div>
+
       <div className="rounded-2xl border border-border bg-card p-4 space-y-3">
         <h3 className="font-display text-sm font-bold text-primary">Session Management</h3>
         <p className="text-xs text-muted-foreground">

@@ -1,7 +1,9 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { useServerFn } from "@tanstack/react-start";
 import { useEffect, useRef, useState, useCallback } from "react";
 import { AppIcon, BottomNav, Btn, ChatIcon, Dandiya, Shell, Wordmark } from "@/components/after9";
 import { supabase } from "@/integrations/supabase/client";
+import { checkAdminStatus, toggleAdminDiscoverLaunch } from "@/lib/admin.functions";
 import {
   FESTIVAL,
   NIGHTS,
@@ -61,6 +63,35 @@ function Discover() {
   const [shareStudioOpen, setShareStudioOpen] = useState(false);
   const [socials, setSocials] = useState<SocialLinkRow[]>([]);
   const [launchControl, setLaunchControl] = useState<any>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [adminToggling, setAdminToggling] = useState(false);
+
+  const checkAdmin = useServerFn(checkAdminStatus);
+  const toggleLaunch = useServerFn(toggleAdminDiscoverLaunch);
+
+  useEffect(() => {
+    checkAdmin()
+      .then((res) => setIsAdmin(Boolean(res?.isAdmin)))
+      .catch(() => setIsAdmin(false));
+  }, [checkAdmin]);
+
+  const handleAdminToggleLaunch = async () => {
+    setAdminToggling(true);
+    try {
+      const nextState = !launchControl?.discover_enabled;
+      await toggleLaunch({ data: { enabled: nextState } });
+      toast.success(
+        nextState
+          ? "Discover is now LIVE globally for all members! 🚀"
+          : "Discover paused — waiting room active.",
+      );
+      loadDiscoveryData();
+    } catch (err: any) {
+      toast.error(err.message || "Failed to toggle Discover state");
+    } finally {
+      setAdminToggling(false);
+    }
+  };
 
   useEffect(() => {
     if (me) setHidden(!me.discoverable);
@@ -267,6 +298,16 @@ function Discover() {
           <Wordmark className="text-2xl text-primary" />
         </div>
         <div className="flex items-center gap-2">
+          {isAdmin && (
+            <Link
+              to="/admin"
+              className="flex min-h-[36px] items-center gap-1 rounded-full border border-primary/40 bg-primary/10 px-3 py-1 text-xs font-black text-primary transition hover:bg-primary hover:text-primary-foreground active:scale-95 shadow-2xs"
+              title="Open Admin Control Center"
+            >
+              <span>👑</span>
+              <span>Admin</span>
+            </Link>
+          )}
           <NotificationBell userId={me?.id} />
           <button
             type="button"
@@ -284,6 +325,66 @@ function Discover() {
           </p>
         </div>
       </header>
+
+      {/* Admin Launch Control Bar (Only rendered for authorized admins) */}
+      {isAdmin && (
+        <div className="mx-auto w-full max-w-md md:max-w-4xl lg:max-w-5xl px-5 pt-1 pb-3">
+          <div
+            className={`rounded-2xl border p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs transition ${
+              launchControl?.discover_enabled
+                ? "border-teal-500/40 bg-teal-500/10 text-teal-950 dark:text-teal-100"
+                : "border-amber-500/50 bg-amber-500/10 text-amber-950 dark:text-amber-100"
+            }`}
+          >
+            <div className="flex items-center gap-3">
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary text-white text-base font-bold shadow-xs">
+                👑
+              </span>
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-xs font-extrabold text-foreground">
+                    Admin Launch Control: Discover is{" "}
+                    {launchControl?.discover_enabled ? "🟢 LIVE" : "🟡 PAUSED"}
+                  </span>
+                  <span className="rounded-full bg-background/90 px-2 py-0.5 text-[10px] font-bold text-muted-foreground border border-border/60">
+                    {launchControl?.completed_profiles_count ?? 0} /{" "}
+                    {launchControl?.readiness_target ?? 50} profiles ready
+                  </span>
+                </div>
+                <p className="text-[11px] text-muted-foreground mt-0.5">
+                  {launchControl?.discover_enabled
+                    ? "Members have full access to profile feeds and Dandiya matching."
+                    : "Members currently see the waiting room. You can launch or pause Discover anytime."}
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
+              <button
+                type="button"
+                disabled={adminToggling}
+                onClick={handleAdminToggleLaunch}
+                className={`rounded-xl px-4 py-2 text-xs font-extrabold text-white shadow-xs transition ${
+                  launchControl?.discover_enabled
+                    ? "bg-amber-600 hover:bg-amber-700"
+                    : "bg-teal-600 hover:bg-teal-700"
+                }`}
+              >
+                {adminToggling
+                  ? "Updating…"
+                  : launchControl?.discover_enabled
+                  ? "Pause Discover"
+                  : "Launch Discover Globally 🚀"}
+              </button>
+              <Link
+                to="/admin"
+                className="rounded-xl border border-border bg-card px-3.5 py-2 text-xs font-bold text-foreground hover:bg-muted shadow-xs transition"
+              >
+                Admin Center →
+              </Link>
+            </div>
+          </div>
+        </div>
+      )}
 
       {launchControl && !launchControl.discover_enabled ? (
         <EarlyCommunityView

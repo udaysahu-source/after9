@@ -14,7 +14,7 @@ export type FloorRatioData = {
   status: "men_heavy" | "women_heavy" | "balanced";
 };
 
-export async function fetchFloorRatio(): Promise<FloorRatioData> {
+export async function fetchFloorRatio(): Promise<FloorRatioData | null> {
   try {
     const { data } = await supabase.rpc("floor_ratio");
     const raw = data as { men?: number; women?: number; total?: number } | null;
@@ -22,38 +22,28 @@ export async function fetchFloorRatio(): Promise<FloorRatioData> {
     const dbWomen = Number(raw?.women ?? 0);
     const dbTotal = Number(raw?.total ?? 0);
 
-    // If total in database is low (< 5), blend with realistic festival floor baseline (64% men : 36% women)
-    // so user always experiences the real-time floor balancing functionality
-    const isSampleData = dbTotal < 5;
-    const effectiveMen = isSampleData ? 64 : dbMen;
-    const effectiveWomen = isSampleData ? 36 : dbWomen;
-    const effectiveTotal = effectiveMen + effectiveWomen || 1;
+    // Insufficient sample: return null (never invent numbers or fake ratios)
+    if (dbTotal < 15) {
+      return null;
+    }
 
-    const menPct = Math.round((effectiveMen / effectiveTotal) * 100);
+    const menPct = Math.round((dbMen / dbTotal) * 100);
     const womenPct = 100 - menPct;
 
     let status: FloorRatioData["status"] = "balanced";
-    if (menPct >= 58) status = "men_heavy";
-    else if (womenPct >= 58) status = "women_heavy";
+    if (menPct >= 60) status = "men_heavy";
+    else if (womenPct >= 60) status = "women_heavy";
 
     return {
-      men: effectiveMen,
-      women: effectiveWomen,
-      total: effectiveTotal,
+      men: dbMen,
+      women: dbWomen,
+      total: dbTotal,
       menPct,
       womenPct,
       status,
     };
-  } catch (err) {
-    console.warn("Failed to fetch floor ratio:", err);
-    return {
-      men: 64,
-      women: 36,
-      total: 100,
-      menPct: 64,
-      womenPct: 36,
-      status: "men_heavy",
-    };
+  } catch {
+    return null;
   }
 }
 

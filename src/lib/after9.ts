@@ -35,11 +35,66 @@ export function vibe(myQuiz: unknown, myNights: unknown, p: { quiz: unknown; nig
   return QUIZ.filter((x) => a[x.key] && a[x.key] === b[x.key]).length * 2 + shared(myNights, p.nights).length;
 }
 
-export function ageFrom(birth: string) {
-  const b = new Date(birth), t = new Date();
-  let a = t.getFullYear() - b.getFullYear();
-  if (t < new Date(t.getFullYear(), b.getMonth(), b.getDate())) a--;
-  return a;
+/**
+ * Validates birth date for India-first DD/MM/YYYY inputs stored as ISO YYYY-MM-DD.
+ * Enforces 18+ adult age eligibility, disallows future dates, checks calendar validity.
+ */
+export function validateBirthDate(birth: string): {
+  valid: boolean;
+  age: number;
+  error?: string;
+} {
+  if (!birth || !/^\d{4}-\d{2}-\d{2}$/.test(birth)) {
+    return { valid: false, age: 0, error: "Please enter a complete date (DD/MM/YYYY)." };
+  }
+
+  const [yStr, mStr, dStr] = birth.split("-");
+  const year = Number(yStr);
+  const month = Number(mStr);
+  const day = Number(dStr);
+
+  if (!year || !month || !day || month < 1 || month > 12 || day < 1 || day > 31) {
+    return { valid: false, age: 0, error: "Please enter a valid calendar date." };
+  }
+
+  // Check valid day of month (including leap year for Feb)
+  const daysInMonth = new Date(year, month, 0).getDate();
+  if (day > daysInMonth) {
+    return { valid: false, age: 0, error: `Invalid date: month ${month} only has ${daysInMonth} days in ${year}.` };
+  }
+
+  const birthDate = new Date(year, month - 1, day);
+  const now = new Date();
+
+  if (birthDate > now) {
+    return { valid: false, age: 0, error: "Birth date cannot be in the future." };
+  }
+
+  if (year < 1920) {
+    return { valid: false, age: 0, error: "Please enter a valid birth year." };
+  }
+
+  let age = now.getFullYear() - year;
+  const monthDiff = now.getMonth() - (month - 1);
+  if (monthDiff < 0 || (monthDiff === 0 && now.getDate() < day)) {
+    age--;
+  }
+
+  if (age < 18) {
+    return {
+      valid: false,
+      age,
+      error: `You must be at least 18 years old to join After9 (current age: ${age}).`,
+    };
+  }
+
+  return { valid: true, age };
+}
+
+export function ageFrom(birth: string): number {
+  if (!birth) return 0;
+  const check = validateBirthDate(birth);
+  return check.age;
 }
 
 const urlCache = new Map<string, string>();

@@ -38,8 +38,6 @@ export function InviteShareModal({
   const inviteUrl =
     typeof window !== "undefined" && activeCode
       ? `${window.location.origin}/?invite=${activeCode}`
-      : typeof window !== "undefined"
-      ? `${window.location.origin}/`
       : "";
 
   const handleCopy = async () => {
@@ -48,7 +46,7 @@ export function InviteShareModal({
       await navigator.clipboard.writeText(inviteUrl);
       setCopied(true);
       Analytics.inviteShared("copy");
-      toast.success("VIP Invite link copied to clipboard! 📋");
+      toast.success("Invite link copied to clipboard! 📋");
       setTimeout(() => setCopied(false), 2500);
     } catch {
       toast.error("Couldn't copy link. Please copy manually.");
@@ -56,19 +54,21 @@ export function InviteShareModal({
   };
 
   const handleWhatsApp = () => {
+    if (!inviteUrl) return;
     Analytics.inviteShared("whatsapp");
-    const text = `Hey! Join me on After9 for Navratri & Garba nights. Meet on the floor, stay after. Skip the photo queue with my VIP pass here: ${inviteUrl}`;
+    const text = `Hey! Join me on After9 for Navratri & Garba nights. Connect on the floor: ${inviteUrl}`;
     const url = `https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`;
     window.open(url, "_blank");
   };
 
   const handleNativeShare = async () => {
+    if (!inviteUrl) return;
     Analytics.inviteShared("native");
     if (typeof navigator !== "undefined" && navigator.share) {
       try {
         await navigator.share({
-          title: "After9 VIP Festival Invite",
-          text: "Join me on After9 for Navratri & Garba nights. Skip the queue with my VIP pass!",
+          title: "After9 Festival Invite",
+          text: "Join me on After9 for Navratri & Garba nights. Connect on the floor!",
           url: inviteUrl,
         });
       } catch {
@@ -102,33 +102,33 @@ export function InviteShareModal({
               <Ticket className="h-5 w-5" />
             </span>
             <div>
-              <p className="text-[11px] font-bold tracking-widest text-action uppercase">VIP FESTIVAL PASS</p>
+              <p className="text-[11px] font-bold tracking-widest text-action uppercase">COMMUNITY INVITES</p>
               <DialogTitle className="font-display text-xl font-extrabold text-primary">
-                Share Your After9 Invite
+                Invite Friends to After9
               </DialogTitle>
             </div>
           </div>
           <DialogDescription className="text-sm text-foreground/85 leading-relaxed pt-1">
-            Give your friends a direct VIP pass to the Garba floor. Friends who join with your code skip the photo check and join your festival circle instantly.
+            Share your personal invite link so friends can connect with you on After9 during Navratri.
           </DialogDescription>
         </DialogHeader>
 
-        {/* Golden VIP Pass Preview */}
+        {/* Invite Card Preview */}
         <div className="relative overflow-hidden rounded-2xl border border-action/40 bg-gradient-to-br from-card via-card to-action/10 p-4 shadow-sm space-y-3">
           <div className="flex items-center justify-between text-xs">
             <span className="font-bold tracking-widest text-primary flex items-center gap-1.5">
               <Sparkles className="h-3.5 w-3.5 text-action" />
-              EXCLUSIVE VIP PASS
+              PERSONAL INVITE
             </span>
             <span className="rounded-full bg-action/15 px-2.5 py-0.5 text-[11px] font-bold text-action">
-              {availableCount} Passes Left
+              {availableCount !== undefined ? `${availableCount} Invites Left` : "Loading…"}
             </span>
           </div>
 
           <div className="rounded-xl border border-border/80 bg-background/90 p-3 space-y-1">
             <p className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground">Your Invite Link</p>
             <p className="font-mono text-xs font-semibold text-primary truncate select-all">
-              {inviteUrl || "Loading your pass…"}
+              {inviteUrl || "Generating your personal invite link…"}
             </p>
           </div>
 

@@ -944,7 +944,7 @@ function Invites({ me, onClaimed }: { me: ProfileRow; onClaimed: () => void }) {
 
   const activeCode =
     primaryCode ?? list.find((i) => !i.claimed_at && !i.revoked)?.code ?? list[0]?.code ?? null;
-  const inviteUrl = activeCode ? `${location.origin}/?invite=${activeCode}` : `${location.origin}/`;
+  const inviteUrl = activeCode ? `${location.origin}/?invite=${activeCode}` : "";
 
   const copyLink = async (c = activeCode) => {
     if (!c) return;
@@ -952,7 +952,7 @@ function Invites({ me, onClaimed }: { me: ProfileRow; onClaimed: () => void }) {
     try {
       await navigator.clipboard.writeText(url);
       setCopied(c);
-      toast.success("VIP Invite link copied to clipboard! 📋");
+      toast.success("Invite link copied to clipboard! 📋");
       setTimeout(() => setCopied(""), 2500);
     } catch {
       toast.error("Couldn't copy link. Please copy manually.");
@@ -962,7 +962,7 @@ function Invites({ me, onClaimed }: { me: ProfileRow; onClaimed: () => void }) {
   const shareWhatsApp = (c = activeCode) => {
     if (!c) return;
     const url = `${location.origin}/?invite=${c}`;
-    const text = `Hey! Join me on After9 for Navratri & Garba nights. Meet on the floor, stay after. Skip the photo queue with my VIP pass here: ${url}`;
+    const text = `Hey! Join me on After9 for Navratri & Garba nights. Connect on the floor: ${url}`;
     window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`, "_blank");
   };
 
@@ -972,8 +972,8 @@ function Invites({ me, onClaimed }: { me: ProfileRow; onClaimed: () => void }) {
     if (navigator.share) {
       try {
         await navigator.share({
-          title: "After9 VIP Festival Invite",
-          text: "Join me on After9 for Navratri & Garba nights. Meet on the floor, stay after!",
+          title: "After9 Festival Invite",
+          text: "Join me on After9 for Navratri & Garba nights. Connect on the floor!",
           url,
         });
         return;
@@ -1017,8 +1017,8 @@ function Invites({ me, onClaimed }: { me: ProfileRow; onClaimed: () => void }) {
         : ["Finished setup · checking", "text-action"];
 
   return (
-    <Section title="YOUR VIP FESTIVAL PASSES">
-      {/* Prominent VIP Pass Hero Card */}
+    <Section title="INVITE FRIENDS TO AFTER9">
+      {/* Community Invite Hero Card */}
       <div className="my-3 overflow-hidden rounded-2xl border border-action/40 bg-gradient-to-br from-card via-card to-action/10 p-5 shadow-sm space-y-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -1027,7 +1027,7 @@ function Invites({ me, onClaimed }: { me: ProfileRow; onClaimed: () => void }) {
             </span>
             <div>
               <p className="text-[11px] font-bold tracking-widest text-action uppercase">
-                VIP PASS SHARING
+                COMMUNITY INVITES
               </p>
               <h3 className="font-display text-lg font-extrabold text-primary">
                 Invite Your Friends
@@ -1035,13 +1035,13 @@ function Invites({ me, onClaimed }: { me: ProfileRow; onClaimed: () => void }) {
             </div>
           </div>
           <span className="rounded-full bg-action/15 px-3 py-1 text-xs font-bold text-action">
-            {available} Passes Left
+            {available} of {list.length || 5} Invites Left
           </span>
         </div>
 
         <p className="text-xs text-muted-foreground leading-relaxed">
-          Friends who join with your VIP link skip the waitlist and join your festival circle
-          instantly. Keep passes for people you know.
+          Share your personal invite link so your friends can connect with you on After9 during Navratri.
+          Keep invites for people you know.
         </p>
 
         {/* Link box */}
@@ -1050,7 +1050,7 @@ function Invites({ me, onClaimed }: { me: ProfileRow; onClaimed: () => void }) {
             Your Personal Invite Link
           </p>
           <p className="font-mono text-xs font-semibold text-primary truncate select-all">
-            {inviteUrl}
+            {inviteUrl || "Loading your invite link…"}
           </p>
         </div>
 

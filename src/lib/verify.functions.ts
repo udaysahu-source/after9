@@ -1,16 +1,34 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 
+import { validateBirthDate } from "./after9";
 import { INSTRUCTIONS, SCHEMA, toVerdict, type Raw, type Verdict } from "./verify-rules";
 
 export const verifyProfile = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }): Promise<Verdict & { status: string }> => {
     const { supabase, userId } = context;
-    const { data: p } = await supabase.from("profiles").select("first_name, prompt, photo_path, invited_by").eq("id", userId).single();
+    const { data: p } = await supabase
+      .from("profiles")
+      .select("first_name, prompt, photo_path, invited_by, birth_date")
+      .eq("id", userId)
+      .single();
+
+    // 1. Strict server-side birth date and 18+ eligibility check
+    if (!p?.birth_date) {
+      return { approved: false, reason: "Birth date is required.", status: "rejected" };
+    }
+    const bCheck = validateBirthDate(p.birth_date);
+    if (!bCheck.valid || bCheck.age < 18) {
+      const reason = bCheck.error || "After9 is strictly for adults 18+.";
+      const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+      await supabaseAdmin.from("profiles").update({ verification_status: "rejected", verification_reason: reason }).eq("id", userId);
+      return { approved: false, reason, status: "rejected" };
+    }
+
     if (!p?.photo_path) return { approved: false, reason: "Add a photo first.", status: "pending" };
     if (p.invited_by) {
-      // Invited by a live member: skip the AI check.
+      // Invited by a live member: skip the AI photo check only if age is verified 18+.
       const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
       const reason = "Joined with a friend's invite — you're live on Discover.";
       await supabaseAdmin.from("profiles").update({ verification_status: "approved", verification_reason: reason }).eq("id", userId);

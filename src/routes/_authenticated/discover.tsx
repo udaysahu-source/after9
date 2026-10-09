@@ -258,10 +258,10 @@ function Discover() {
             type="button"
             onClick={() => setInviteModalOpen(true)}
             className="flex min-h-[36px] items-center gap-1 rounded-full border border-action/50 bg-action/10 px-3 py-1 text-xs font-bold text-action transition hover:bg-action/20 active:scale-95 shadow-2xs"
-            title="Share VIP Invite Passes"
+            title="Invite Friends to After9"
           >
             <span>🎟️</span>
-            <span>Passes</span>
+            <span>Invites</span>
           </button>
           <p className="text-right text-xs text-muted-foreground animate-rise [animation-delay:60ms]">
             {FESTIVAL.name} {FESTIVAL.year}
@@ -273,16 +273,16 @@ function Discover() {
 
       <div className="mx-auto w-full max-w-md md:max-w-4xl lg:max-w-5xl px-5">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
-          {/* VIP Invite Passes Banner */}
+          {/* Invite Friends Banner */}
           <div className="flex items-center justify-between rounded-xl border border-action/40 bg-gradient-to-r from-action/10 via-card to-card p-3 shadow-xs min-h-[56px]">
             <div className="flex items-center gap-2.5 min-w-0">
               <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-action/20 text-lg">
                 🎟️
               </span>
               <div className="min-w-0">
-                <p className="text-xs font-bold text-primary">5 VIP Festival Passes</p>
+                <p className="text-xs font-bold text-primary">Invite Friends to After9</p>
                 <p className="text-[11px] text-muted-foreground truncate">
-                  Invite friends to balance the floor & skip waitlist
+                  Connect directly with campus & festival friends
                 </p>
               </div>
             </div>
@@ -291,7 +291,7 @@ function Discover() {
               onClick={() => setInviteModalOpen(true)}
               className="touch-tactile shrink-0 min-h-[36px] rounded-lg bg-action px-3 py-1.5 text-xs font-bold text-action-foreground shadow-xs transition hover:opacity-90 active:scale-95"
             >
-              Share ↗
+              Invite ↗
             </button>
           </div>
 

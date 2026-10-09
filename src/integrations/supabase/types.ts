@@ -379,6 +379,7 @@ export type Database = {
           profile_url: string
           updated_at: string
           user_id: string
+          visibility: "private" | "share_card" | "matched"
         }
         Insert: {
           created_at?: string
@@ -389,6 +390,7 @@ export type Database = {
           profile_url: string
           updated_at?: string
           user_id: string
+          visibility?: "private" | "share_card" | "matched"
         }
         Update: {
           created_at?: string
@@ -399,6 +401,7 @@ export type Database = {
           profile_url?: string
           updated_at?: string
           user_id?: string
+          visibility?: "private" | "share_card" | "matched"
         }
         Relationships: [
           {

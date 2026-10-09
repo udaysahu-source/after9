@@ -1,6 +1,7 @@
 import { supabase } from "@/integrations/supabase/client";
 
 export type SocialPlatform = "instagram" | "snapchat" | "youtube" | "x" | "linkedin" | "custom";
+export type SocialVisibility = "private" | "share_card" | "matched";
 
 export type SocialLinkRow = {
   id: string;
@@ -9,6 +10,7 @@ export type SocialLinkRow = {
   handle: string;
   profile_url: string;
   is_enabled: boolean;
+  visibility: SocialVisibility;
   created_at: string;
   updated_at: string;
 };
@@ -184,7 +186,8 @@ export async function upsertSocialLink(
   platform: SocialPlatform,
   handle: string,
   profileUrl: string,
-  isEnabled = true
+  isEnabled = true,
+  visibility: SocialVisibility = "private"
 ): Promise<{ ok: boolean; error?: string; row?: SocialLinkRow }> {
   const { data, error } = await supabase
     .from("social_links")
@@ -195,6 +198,7 @@ export async function upsertSocialLink(
         handle,
         profile_url: profileUrl,
         is_enabled: isEnabled,
+        visibility,
         updated_at: new Date().toISOString(),
       },
       { onConflict: "user_id, platform" }
@@ -206,6 +210,21 @@ export async function upsertSocialLink(
     return { ok: false, error: error.message };
   }
   return { ok: true, row: data as SocialLinkRow };
+}
+
+/** Update social link visibility setting */
+export async function updateSocialLinkVisibility(
+  id: string,
+  userId: string,
+  visibility: SocialVisibility
+): Promise<boolean> {
+  const { error } = await supabase
+    .from("social_links")
+    .update({ visibility, updated_at: new Date().toISOString() })
+    .eq("id", id)
+    .eq("user_id", userId);
+
+  return !error;
 }
 
 /** Toggle social link visibility */
@@ -232,4 +251,17 @@ export async function deleteSocialLink(id: string, userId: string): Promise<bool
     .eq("user_id", userId);
 
   return !error;
+}
+
+/** Get matched social links for a mutual clash partner (only returns links marked as 'matched' and is_enabled = true) */
+export async function getMatchedSocialLinks(targetUserId: string): Promise<SocialLinkRow[]> {
+  const { data, error } = await supabase
+    .from("social_links")
+    .select("*")
+    .eq("user_id", targetUserId)
+    .eq("is_enabled", true)
+    .eq("visibility", "matched");
+
+  if (error) return [];
+  return (data ?? []) as SocialLinkRow[];
 }

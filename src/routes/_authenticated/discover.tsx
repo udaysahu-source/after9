@@ -148,7 +148,10 @@ function Discover() {
       .on("postgres_changes", { event: "*", schema: "public", table: "profiles" }, () => {
         loadDiscoveryData();
       })
-      .on("postgres_changes", { event: "*", schema: "public", table: "launch_control" }, () => {
+      .on("postgres_changes", { event: "*", schema: "public", table: "launch_control" }, (payload: any) => {
+        if (payload?.new?.discover_enabled) {
+          toast.success("🎉 Discover matching is now LIVE! Start swiping to find your Garba crew.");
+        }
         loadDiscoveryData();
       })
       .subscribe();

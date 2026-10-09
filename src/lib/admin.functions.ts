@@ -687,5 +687,35 @@ export const toggleAdminDiscoverLaunch = createServerFn({ method: "POST" })
       },
     });
 
+    // When Discover is enabled globally, send system notification to all registered users!
+    if (data.enabled) {
+      try {
+        const { data: allUsers } = await supabaseAdmin
+          .from("profiles")
+          .select("id")
+          .eq("is_suspended", false);
+
+        if (allUsers && allUsers.length > 0) {
+          const now = new Date().toISOString();
+          const notifs = allUsers.map((u) => ({
+            user_id: u.id,
+            type: "system" as const,
+            title: "🎉 Discover Deck is Now Live!",
+            body: "The Garba matching deck is officially open! See who is attending your Garba nights and send your first Dandiya.",
+            action_url: "/discover",
+            data: { event: "discover_launched", timestamp: now },
+            read: false,
+          }));
+
+          // Batch insert in chunks of 100
+          for (let i = 0; i < notifs.length; i += 100) {
+            await supabaseAdmin.from("notifications").insert(notifs.slice(i, i + 100));
+          }
+        }
+      } catch (err) {
+        console.warn("[Admin] Failed to broadcast launch notification:", err);
+      }
+    }
+
     return { ok: true, enabled: data.enabled };
   });

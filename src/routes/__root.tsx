@@ -53,6 +53,16 @@ function ErrorComponent({ error, reset }: ErrorComponentProps) {
         <p className="mt-2 text-sm text-muted-foreground">
           Something went wrong on our end. You can try refreshing or head back home.
         </p>
+        {Boolean(error) && (
+          <details className="mt-4 text-left">
+            <summary className="cursor-pointer text-center text-xs text-muted-foreground hover:text-foreground">
+              Tap for error details
+            </summary>
+            <pre className="mt-2 max-h-36 overflow-auto rounded-lg bg-muted p-2.5 text-[11px] text-destructive whitespace-pre-wrap break-words">
+              {error instanceof Error ? error.message : String(error)}
+            </pre>
+          </details>
+        )}
         <div className="mt-6 flex flex-wrap justify-center gap-2">
           <button
             onClick={() => {
@@ -82,7 +92,10 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { name: "viewport", content: "width=device-width, initial-scale=1" },
       { name: "theme-color", content: "#4A102B" },
       { title: "After9 — Meet on the floor. Stay after." },
-      { name: "description", content: "Social discovery for real people for Navratri and Garba nights." },
+      {
+        name: "description",
+        content: "Social discovery for real people for Navratri and Garba nights.",
+      },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
     ],
@@ -93,7 +106,10 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       },
       { rel: "preconnect", href: "https://fonts.googleapis.com" },
       { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
-      { rel: "stylesheet", href: "https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Syne:wght@600;700;800&display=swap" },
+      {
+        rel: "stylesheet",
+        href: "https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Syne:wght@600;700;800&display=swap",
+      },
       { rel: "icon", type: "image/png", href: "/favicon.png" },
     ],
   }),

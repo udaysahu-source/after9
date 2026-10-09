@@ -1,5 +1,6 @@
 import { Link } from "@tanstack/react-router";
 import type { ReactNode } from "react";
+import { Compass, MessageCircle, User } from "lucide-react";
 import { cn } from "@/lib/utils";
 import appIcon from "@/assets/app_icon.png";
 
@@ -99,41 +100,60 @@ export function Shell({
 
 export function BottomNav() {
   const item =
-    "group relative flex flex-1 flex-col items-center justify-center gap-1 min-h-[48px] py-1.5 px-3 text-xs font-medium text-muted-foreground transition-all duration-150 ease-[var(--ease-out-quint)] active:scale-95 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-action rounded-xl";
+    "group relative flex flex-1 flex-col items-center justify-center gap-1 min-h-[50px] py-1.5 px-3 text-xs font-medium text-muted-foreground transition-all duration-150 ease-[var(--ease-out-quint)] active:scale-95 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-action rounded-xl";
   const active = { className: "text-primary font-semibold" };
   return (
-    <nav
-      className="sticky bottom-0 z-30 flex border-t border-border bg-background/95 backdrop-blur-sm pb-[env(safe-area-inset-bottom,0px)] md:fixed md:bottom-6 md:left-1/2 md:-translate-x-1/2 md:w-auto md:min-w-[340px] md:max-w-md md:rounded-full md:border md:border-border md:bg-card/95 md:backdrop-blur-md md:shadow-lg md:px-5 md:py-1.5"
-      aria-label="Main Navigation"
-    >
-      <Link to="/discover" className={item} activeProps={active}>
-        {({ isActive }) => (
-          <>
-            <Dandiya className={cn("h-5 w-5 transition-transform duration-200 group-hover:scale-110", isActive && "text-primary scale-105")} />
-            <span>Discover</span>
-            {isActive && <span className="h-1 w-1 rounded-full bg-action animate-scale-in" />}
-          </>
-        )}
-      </Link>
-      <Link to="/matches" className={item} activeProps={active}>
-        {({ isActive }) => (
-          <>
-            <ChatIcon className={cn("h-5 w-5 transition-transform duration-200 group-hover:scale-110", isActive && "text-primary scale-105")} />
-            <span>Chats</span>
-            {isActive && <span className="h-1 w-1 rounded-full bg-action animate-scale-in" />}
-          </>
-        )}
-      </Link>
-      <Link to="/profile" className={item} activeProps={active}>
-        {({ isActive }) => (
-          <>
-            <span className={cn("font-display text-base leading-5 transition-transform duration-200 group-hover:scale-110", isActive && "text-primary")}>●</span>
-            <span>You</span>
-            {isActive && <span className="h-1 w-1 rounded-full bg-action animate-scale-in" />}
-          </>
-        )}
-      </Link>
-    </nav>
+    <>
+      {/* Spacer to guarantee page content is never hidden behind the fixed bottom navbar */}
+      <div className="h-20 w-full shrink-0 pointer-events-none md:h-24" aria-hidden="true" />
+      <nav
+        className="fixed bottom-0 left-0 right-0 z-40 flex items-center justify-around border-t border-border/80 bg-background/95 backdrop-blur-md px-2 py-1 pb-[calc(0.35rem+env(safe-area-inset-bottom,0px))] shadow-[0_-4px_24px_rgba(0,0,0,0.06)] md:bottom-6 md:left-1/2 md:-translate-x-1/2 md:w-auto md:min-w-[360px] md:max-w-md md:rounded-full md:border md:border-border/80 md:bg-card/95 md:backdrop-blur-md md:shadow-xl md:px-5 md:py-1.5 md:pb-1.5"
+        aria-label="Main Navigation"
+      >
+        <Link to="/discover" className={item} activeProps={active}>
+          {({ isActive }) => (
+            <>
+              <Compass
+                className={cn(
+                  "h-5 w-5 transition-transform duration-200 group-hover:scale-110",
+                  isActive ? "text-action scale-105 stroke-[2.3]" : "text-muted-foreground/85 stroke-2"
+                )}
+              />
+              <span className={cn(isActive && "text-primary font-bold")}>Discover</span>
+              {isActive && <span className="h-1 w-1 rounded-full bg-action animate-scale-in" />}
+            </>
+          )}
+        </Link>
+        <Link to="/matches" className={item} activeProps={active}>
+          {({ isActive }) => (
+            <>
+              <MessageCircle
+                className={cn(
+                  "h-5 w-5 transition-transform duration-200 group-hover:scale-110",
+                  isActive ? "text-action scale-105 stroke-[2.3]" : "text-muted-foreground/85 stroke-2"
+                )}
+              />
+              <span className={cn(isActive && "text-primary font-bold")}>Chats</span>
+              {isActive && <span className="h-1 w-1 rounded-full bg-action animate-scale-in" />}
+            </>
+          )}
+        </Link>
+        <Link to="/profile" className={item} activeProps={active}>
+          {({ isActive }) => (
+            <>
+              <User
+                className={cn(
+                  "h-5 w-5 transition-transform duration-200 group-hover:scale-110",
+                  isActive ? "text-action scale-105 stroke-[2.3]" : "text-muted-foreground/85 stroke-2"
+                )}
+              />
+              <span className={cn(isActive && "text-primary font-bold")}>You</span>
+              {isActive && <span className="h-1 w-1 rounded-full bg-action animate-scale-in" />}
+            </>
+          )}
+        </Link>
+      </nav>
+    </>
   );
 }
 

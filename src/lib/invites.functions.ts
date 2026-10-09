@@ -13,7 +13,20 @@ export const ensureInvites = createServerFn({ method: "POST" })
     const { userId } = context;
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
-    // Fetch caller's existing active invites
+    // First try the transactional ensure_my_invites RPC
+    const { data: rpcRes, error: rpcErr } = await supabaseAdmin.rpc("ensure_my_invites");
+    if (!rpcErr && rpcRes && (rpcRes as any).ok) {
+      const res = rpcRes as any;
+      return {
+        ok: true as const,
+        primaryCode: (res.primary_code ?? null) as string | null,
+        availableCount: typeof res.available_count === "number" ? res.available_count : 0,
+        claimedCount: typeof res.claimed_count === "number" ? res.claimed_count : 0,
+        total: typeof res.total_allocation === "number" ? res.total_allocation : INVITE_ALLOCATION,
+      };
+    }
+
+    // Fallback: Fetch caller's existing active invites
     const { data: existing } = await supabaseAdmin
       .from("invites")
       .select("code, claimed_by, revoked, expires_at")
@@ -35,12 +48,14 @@ export const ensureInvites = createServerFn({ method: "POST" })
     }
 
     const available = validInvites.filter((i) => !i.claimed_by).map((i) => i.code);
-    const primaryCode = available[0] ?? newlyCreated[0] ?? validInvites[0]?.code ?? null;
+    // Never fall back to an already-claimed code!
+    const primaryCode = available[0] ?? newlyCreated[0] ?? null;
 
     return {
       ok: true as const,
       primaryCode,
       availableCount: available.length + newlyCreated.length,
+      claimedCount: validInvites.filter((i) => i.claimed_by).length,
       total: INVITE_ALLOCATION,
     };
   });

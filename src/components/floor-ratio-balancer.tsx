@@ -171,8 +171,8 @@ export function FloorBalanceModal({
 
   const handleWhatsApp = () => {
     const text = isOverRepresented
-      ? `Hey! Join me on After9 for Navratri/Garba nights. The floor has high demand and we need dancers to balance the circles! Skip the photo waitlist with my VIP pass: ${inviteUrl}`
-      : `Hey! I just got on After9 for Navratri/Garba nights. Join me with my VIP pass here: ${inviteUrl}`;
+      ? `Hey! Join me on After9 for Navratri/Garba nights. We need dancers on the floor to balance the circles! Join using my invite: ${inviteUrl}`
+      : `Hey! I just got on After9 for Navratri/Garba nights. Join me on the floor with my invite: ${inviteUrl}`;
     const url = `https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`;
     window.open(url, "_blank");
   };
@@ -181,8 +181,8 @@ export function FloorBalanceModal({
     if (typeof navigator !== "undefined" && navigator.share) {
       try {
         await navigator.share({
-          title: "After9 VIP Festival Invite",
-          text: "Join me on After9 — Navratri festival social discovery. Skip the waitlist with my VIP pass!",
+          title: "After9 Community Invite",
+          text: "Join me on After9 — Navratri festival social discovery! Connect with my invite link.",
           url: inviteUrl,
         });
       } catch {
@@ -216,7 +216,7 @@ export function FloorBalanceModal({
                 {isOverRepresented
                   ? "Floor Balance Notice"
                   : isUnderRepresented
-                  ? "VIP Access Granted"
+                  ? "Priority Deck Placement"
                   : "Floor Status"}
               </p>
               <DialogTitle className="font-display text-xl font-extrabold text-primary">
@@ -241,12 +241,12 @@ export function FloorBalanceModal({
               </>
             ) : isUnderRepresented ? (
               <>
-                You've received <b className="text-primary">Instant VIP Queue Status</b>!
-                Because the floor currently has <b className="text-primary">{gender === "woman" ? ratio.menPct : ratio.womenPct}% {gender === "woman" ? "guys" : "girls"}</b>, your profile will be highlighted to ensure you get the best clashes.
+                You've received <b className="text-primary">Priority Discovery Placement</b>!
+                Because the floor currently has <b className="text-primary">{gender === "woman" ? ratio.menPct : ratio.womenPct}% {gender === "woman" ? "guys" : "girls"}</b>, your profile will be highlighted to ensure you get great clashes.
               </>
             ) : (
               <>
-                The festival floor has a great 50/50 ratio right now! Matches and dandiya clashes are moving fast.
+                The festival floor has a balanced 50/50 ratio right now! Matches and dandiya clashes are moving fast.
               </>
             )}
           </DialogDescription>
@@ -277,13 +277,13 @@ export function FloorBalanceModal({
           </p>
         </div>
 
-        {/* Invite Link & Sharing (Crucial for balancing the ratio!) */}
+        {/* Invite Link & Sharing */}
         <div className="space-y-2 pt-1">
           <p className="text-xs font-semibold text-muted-foreground tracking-wide">
-            {isOverRepresented ? "INVITE A FRIEND TO BALANCE THE FLOOR" : "SHARE YOUR VIP PASS"}
+            {isOverRepresented ? "INVITE A FRIEND TO BALANCE THE FLOOR" : "SHARE YOUR AFTER9 INVITE"}
           </p>
           <div className="flex items-center gap-2 rounded-xl border border-border bg-card px-3 py-2 text-xs font-mono text-muted-foreground">
-            <span className="flex-1 truncate">{inviteUrl || "Generating your VIP pass…"}</span>
+            <span className="flex-1 truncate">{inviteUrl || "Generating your invite pass…"}</span>
             <button
               onClick={handleCopy}
               className="flex items-center gap-1 rounded-lg bg-primary px-2.5 py-1 text-[11px] font-semibold text-primary-foreground transition hover:opacity-90"

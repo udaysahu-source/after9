@@ -1,8 +1,7 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
-import { useState, type ReactNode } from "react";
-import { BottomNav, Btn, ChatIcon, Dandiya, Shell } from "@/components/after9";
-import { Link } from "@tanstack/react-router";
+import { useState, useEffect, useMemo, type ReactNode } from "react";
+import { BottomNav, Btn, Shell } from "@/components/after9";
 import {
   Choice,
   NightsPicker,
@@ -18,30 +17,35 @@ import {
   goingNights,
   useMyProfile,
   usePhotoUrls,
+  validateBirthDate,
   type Attendance,
   type ProfileRow,
 } from "@/lib/after9";
 import { verifyProfile } from "@/lib/verify.functions";
-import { claimInvite, ensureInvites, revokeInvite } from "@/lib/invites.functions";
-import {
-  drawInviteCard,
-  drawProfileCard,
-  type CardCustomization,
-  type ProfileCardData,
-} from "@/lib/share-cards";
-import { useEffect } from "react";
+import { drawInviteCard } from "@/lib/share-cards";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import {
+  User,
+  Sparkles,
+  Link2,
+  Compass,
+  Shield,
   Ticket,
+  Bell,
+  Settings,
+  ArrowLeft,
   Copy,
   Check,
   Share2,
-  Sparkles,
-  ExternalLink,
   RefreshCw,
-  Lock,
+  ExternalLink,
   ShieldCheck,
+  LogOut,
+  Trash2,
+  AlertTriangle,
+  ChevronRight,
+  Info,
 } from "lucide-react";
 import { ShareCardStudio } from "@/components/share-card-studio";
 import { SocialLinksManager } from "@/components/social-links-manager";
@@ -50,14 +54,15 @@ import { getMySocialLinks, type SocialLinkRow } from "@/lib/social-links";
 import { NotificationBell } from "@/components/notifications-popover";
 import { PWAInstallCard } from "@/components/pwa-install-button";
 import { NotificationSettings } from "@/components/notification-settings";
+import { useAuthoritativeInvites } from "@/lib/invites";
 
 export const Route = createFileRoute("/_authenticated/profile")({
   head: () => ({
     meta: [
       { title: "Your profile — After9" },
-      { name: "description", content: "Edit your After9 profile, nights and who you see." },
+      { name: "description", content: "Edit your After9 profile, card, discovery preferences and settings." },
       { property: "og:title", content: "Your profile — After9" },
-      { property: "og:description", content: "Edit your After9 profile, nights and who you see." },
+      { property: "og:description", content: "Edit your After9 profile, card, discovery preferences and settings." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
     ],
@@ -65,13 +70,56 @@ export const Route = createFileRoute("/_authenticated/profile")({
   component: Profile,
 });
 
-type Panel = null | "basics" | "photo" | "quiz" | "nights" | "socials" | "privacy";
+export type ProfileCategory =
+  | "my_profile"
+  | "card"
+  | "socials"
+  | "discovery"
+  | "privacy"
+  | "invites"
+  | "notifications"
+  | "account";
+
+export function calculateProfileCompletion(p: ProfileRow, socials: SocialLinkRow[]): {
+  percentage: number;
+  missing: string[];
+} {
+  let score = 0;
+  const missing: string[] = [];
+
+  if (p.photo_path) score += 20;
+  else missing.push("Photo");
+
+  if (p.first_name?.trim()) score += 15;
+  else missing.push("Name");
+
+  if (p.birth_date) score += 15;
+  else missing.push("Birthday");
+
+  if (p.prompt?.trim()) score += 15;
+  else missing.push("Garba Prompt");
+
+  if (goingNights(p.nights).length > 0) score += 15;
+  else missing.push("Nights");
+
+  if (Object.keys((p.quiz ?? {}) as Record<string, string>).length > 0) score += 10;
+  else missing.push("Quiz");
+
+  if (p.college?.trim()) score += 5;
+  else missing.push("College");
+
+  if (socials.length > 0) score += 5;
+  else missing.push("Social link");
+
+  return { percentage: Math.min(score, 100), missing };
+}
 
 function Profile() {
   const { p, save, reload } = useMyProfile();
   const nav = useNavigate();
   const verify = useServerFn(verifyProfile);
-  const [panel, setPanel] = useState<Panel>(null);
+
+  const [activeCategory, setActiveCategory] = useState<ProfileCategory | null>(null);
   const [checking, setChecking] = useState(false);
   const [cardStudioOpen, setCardStudioOpen] = useState(false);
   const [socials, setSocials] = useState<SocialLinkRow[]>([]);
@@ -83,12 +131,13 @@ function Profile() {
     }
   }, [p?.id]);
 
-  if (!p)
+  if (!p) {
     return (
       <Shell>
         <div />
       </Shell>
     );
+  }
 
   const recheck = async () => {
     setChecking(true);
@@ -99,755 +148,557 @@ function Profile() {
       setChecking(false);
     }
   };
+
   const saveAndCheck = async (patch: Partial<ProfileRow>) => {
     await save(patch);
-    setPanel(null);
-    if ("photo_path" in patch || "prompt" in patch || "first_name" in patch) recheck();
+    if ("photo_path" in patch || "prompt" in patch || "first_name" in patch) {
+      recheck();
+    }
   };
-  const status = {
-    approved: ["Live", "Your profile is visible on Discover.", "border-teal"],
-    pending: [
-      "Checking",
-      "We're making sure your profile is a real person. Usually a few seconds.",
-      "border-action",
-    ],
-    rejected: [
-      "Not live",
-      p.verification_reason ?? "Update your photo or prompt and re-check.",
-      "border-destructive",
-    ],
-  }[p.verification_status as "approved" | "pending" | "rejected"] ?? [
-    "Checking",
-    "",
-    "border-action",
-  ];
 
-  if (panel) {
-    return (
-      <Editor
-        panel={panel}
-        p={p}
-        photoUrl={p.photo_path ? urls[p.photo_path] : undefined}
-        socials={socials}
-        onSocialsChange={setSocials}
-        onClose={() => setPanel(null)}
-        onSave={saveAndCheck}
-        onReload={reload}
-      />
-    );
-  }
+  const completion = calculateProfileCompletion(p, socials);
+
+  const categories = [
+    {
+      id: "my_profile" as const,
+      label: "My Profile",
+      icon: User,
+      subtitle: p.first_name ? `${p.first_name}${p.prompt ? ` · "${p.prompt.slice(0, 24)}…"` : ""}` : "Personal details & photo",
+    },
+    {
+      id: "card" as const,
+      label: "My After9 Card",
+      icon: Sparkles,
+      subtitle: p.public_profile_enabled ? "Public link active · Custom style" : "Private link · Custom style",
+    },
+    {
+      id: "socials" as const,
+      label: "Social Links",
+      icon: Link2,
+      subtitle: socials.length > 0 ? `${socials.length} link${socials.length > 1 ? "s" : ""} added` : "Instagram, Snapchat, Spotify",
+    },
+    {
+      id: "discovery" as const,
+      label: "Discovery Preferences",
+      icon: Compass,
+      subtitle: !p.discoverable ? "Hidden from Discover" : `${p.min_age}–${p.max_age} yrs · ${p.interested_in}`,
+    },
+    {
+      id: "privacy" as const,
+      label: "Privacy & Safety",
+      icon: Shield,
+      subtitle: "Audience meter, blocked users & safety",
+    },
+    {
+      id: "invites" as const,
+      label: "Invitations & Referrals",
+      icon: Ticket,
+      subtitle: "Personal invite link & friend list",
+    },
+    {
+      id: "notifications" as const,
+      label: "App & Notifications",
+      icon: Bell,
+      subtitle: "Install PWA & Web Push alerts",
+    },
+    {
+      id: "account" as const,
+      label: "Account",
+      icon: Settings,
+      subtitle: "Sign out & account deletion",
+    },
+  ];
 
   return (
     <Shell maxWidth="wide">
       <main className="flex-1 pb-24 md:pb-28">
-        <div className="flex items-end justify-between px-5 pt-6 md:pt-10">
-          <div className="flex items-end gap-4">
-            <button
-              onClick={() => setPanel("photo")}
-              className="h-28 w-21 shrink-0 overflow-hidden rounded-xs bg-muted shadow-xs transition-transform hover:scale-105"
-              aria-label="Change photo"
-            >
-              {p.photo_path && urls[p.photo_path] && (
-                <img src={urls[p.photo_path]} alt="You" className="h-full w-full object-cover" />
-              )}
-            </button>
-            <div>
-              <h1 className="font-display text-3xl font-extrabold text-primary md:text-4xl">
-                {p.first_name}
-                {p.birth_date ? `, ${ageFrom(p.birth_date)}` : ""}
-              </h1>
-              <p className="text-sm text-muted-foreground">
-                {p.college}
-                {p.branch ? ` · ${p.branch}` : ""}
-              </p>
-              <p className="mt-1 text-sm font-semibold text-teal">
-                {goingNights(p.nights).length} of 9 nights
-              </p>
-              <button
-                type="button"
-                onClick={() => setCardStudioOpen(true)}
-                className="mt-2 inline-flex items-center gap-1.5 text-sm font-semibold text-action transition hover:underline"
-              >
-                <Sparkles className="h-3.5 w-3.5" />
-                Customize & Share card ↗
-              </button>
-            </div>
+        {/* Top Header with Notification Bell */}
+        <div className="flex items-center justify-between px-5 pt-6 md:pt-10">
+          <div>
+            <h1 className="font-display text-3xl font-extrabold text-primary md:text-4xl">Profile & Settings</h1>
+            <p className="text-xs text-muted-foreground mt-0.5">Manage your Garba presence, card and privacy.</p>
           </div>
-          <div className="mb-2">
+          <div className="flex items-center gap-2">
             <NotificationBell userId={p.id} />
           </div>
         </div>
 
-        <div className="mt-4 md:mt-8 md:grid md:grid-cols-12 md:gap-8 md:px-5">
-          <div className="flex flex-col gap-6 md:col-span-5">
-            <div
-              className={cn(
-                "mx-5 md:mx-0 border-l-2 bg-card px-4 py-3 rounded-xs shadow-2xs",
-                status[2],
-              )}
-            >
-              <p className="text-sm font-semibold">{status[0]}</p>
-              <p className="text-sm text-muted-foreground">{status[1]}</p>
-              {p.verification_status !== "approved" && (
+        {/* Responsive Content Grid */}
+        <div className="mt-5 md:mt-8 md:grid md:grid-cols-12 md:gap-8 md:px-5">
+          {/* LEFT COLUMN: Overview Card & Category Nav */}
+          <div className={cn("flex flex-col gap-5 md:col-span-5", activeCategory !== null && "hidden md:flex")}>
+            {/* Clean Profile Overview (Displaying only the required 6 elements) */}
+            <div className="mx-5 md:mx-0 overflow-hidden rounded-2xl border border-border/80 bg-card p-5 shadow-xs space-y-4">
+              <div className="flex items-center gap-4">
+                {/* 1. Profile photo */}
+                <div className="relative h-20 w-16 shrink-0 overflow-hidden rounded-xl bg-muted shadow-xs">
+                  {p.photo_path && urls[p.photo_path] ? (
+                    <img src={urls[p.photo_path]} alt={p.first_name ?? "You"} className="h-full w-full object-cover" />
+                  ) : (
+                    <div className="flex h-full w-full items-center justify-center font-bold text-muted-foreground">
+                      {p.first_name?.[0] || "?"}
+                    </div>
+                  )}
+                  <span
+                    className={cn(
+                      "absolute bottom-1 right-1 h-3 w-3 rounded-full border-2 border-background",
+                      p.verification_status === "approved"
+                        ? "bg-teal-500"
+                        : p.verification_status === "pending"
+                        ? "bg-action"
+                        : "bg-destructive"
+                    )}
+                    title={`Status: ${p.verification_status}`}
+                  />
+                </div>
+
+                <div className="min-w-0 flex-1 space-y-1">
+                  {/* 2. Name and age */}
+                  <h2 className="font-display text-xl font-extrabold text-primary truncate">
+                    {p.first_name || "Your Name"}
+                    {p.birth_date ? `, ${ageFrom(p.birth_date)}` : ""}
+                  </h2>
+
+                  {/* 3. College, if the user has enabled its visibility */}
+                  {p.show_college && p.college ? (
+                    <p className="text-xs text-muted-foreground truncate font-medium">
+                      🎓 {p.college}
+                      {p.branch ? ` · ${p.branch}` : ""}
+                    </p>
+                  ) : null}
+
+                  <p className="text-xs font-semibold text-teal">
+                    {goingNights(p.nights).length} of 9 Garba nights selected
+                  </p>
+                </div>
+              </div>
+
+              {/* 4. Profile completion status, calculated from actual saved fields */}
+              <div className="rounded-xl border border-border/60 bg-background/80 p-3 space-y-1.5">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-bold text-foreground">Profile Completion</span>
+                  <span className="font-black text-action">{completion.percentage}%</span>
+                </div>
+                <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
+                  <div
+                    className="h-full rounded-full bg-gradient-to-r from-action to-saffron transition-all duration-500"
+                    style={{ width: `${completion.percentage}%` }}
+                  />
+                </div>
+                {completion.missing.length > 0 ? (
+                  <p className="text-[11px] text-muted-foreground">
+                    Add <span className="font-medium text-foreground">{completion.missing.slice(0, 2).join(", ")}</span> to reach 100%
+                  </p>
+                ) : (
+                  <p className="text-[11px] text-teal font-medium">✨ All profile details complete</p>
+                )}
+              </div>
+
+              {/* 5 & 6. Primary Action Buttons */}
+              <div className="grid grid-cols-2 gap-2 pt-1">
                 <button
-                  disabled={checking}
-                  onClick={recheck}
-                  className="mt-2 text-sm font-semibold text-primary"
+                  type="button"
+                  onClick={() => setCardStudioOpen(true)}
+                  className="flex items-center justify-center gap-1.5 rounded-xl bg-primary px-3 py-2.5 text-xs font-bold text-primary-foreground shadow-xs transition hover:opacity-90 active:scale-98"
                 >
-                  {checking ? "Checking…" : "Check again"}
+                  <Sparkles className="h-3.5 w-3.5 text-saffron" />
+                  Customize Card
                 </button>
-              )}
+                <button
+                  type="button"
+                  onClick={() => setActiveCategory("my_profile")}
+                  className="flex items-center justify-center gap-1.5 rounded-xl border border-border bg-background px-3 py-2.5 text-xs font-bold text-foreground transition hover:bg-muted active:scale-98"
+                >
+                  <User className="h-3.5 w-3.5 text-action" />
+                  Edit Profile
+                </button>
+              </div>
             </div>
 
-            {/* Concise "Your After9 Card" Section */}
-            <YourAfter9CardHero
-              p={p}
-              photoUrl={p.photo_path ? (urls[p.photo_path] ?? null) : null}
-              onOpenStudio={() => setCardStudioOpen(true)}
-            />
-
-            <CardStats />
-            <ShareStats />
-
-            <div className="mt-2 flex flex-col gap-2 px-5 md:px-0">
-              <Btn
-                variant="outline"
-                onClick={async () => {
-                  await supabase.auth.signOut();
-                  nav({ to: "/" });
-                }}
-              >
-                Sign out
-              </Btn>
-              <Btn
-                variant="ghost"
-                className="text-destructive text-sm"
-                onClick={async () => {
-                  if (!confirm("Delete your profile, photo and chats? This can't be undone."))
-                    return;
-                  if (p.photo_path) await supabase.storage.from("photos").remove([p.photo_path]);
-                  await supabase.from("profiles").delete().eq("id", p.id);
-                  await supabase.auth.signOut();
-                  nav({ to: "/" });
-                }}
-              >
-                Delete my profile
-              </Btn>
+            {/* Category Navigation Menu */}
+            <div className="mx-5 md:mx-0 rounded-2xl border border-border/80 bg-card overflow-hidden shadow-xs divide-y divide-border/60">
+              {categories.map((cat) => {
+                const Icon = cat.icon;
+                const active = activeCategory === cat.id;
+                return (
+                  <button
+                    key={cat.id}
+                    type="button"
+                    onClick={() => setActiveCategory(cat.id)}
+                    className={cn(
+                      "flex w-full items-center justify-between p-3.5 text-left transition hover:bg-muted/40 active:bg-muted/60",
+                      active && "bg-muted/50 border-l-3 border-action"
+                    )}
+                  >
+                    <div className="flex items-center gap-3 min-w-0 pr-2">
+                      <span className={cn(
+                        "flex h-9 w-9 shrink-0 items-center justify-center rounded-xl transition",
+                        active ? "bg-action/20 text-action" : "bg-muted text-muted-foreground"
+                      )}>
+                        <Icon className="h-4 w-4" />
+                      </span>
+                      <div className="min-w-0">
+                        <p className={cn("text-xs font-bold truncate", active ? "text-primary" : "text-foreground")}>
+                          {cat.label}
+                        </p>
+                        <p className="text-[11px] text-muted-foreground truncate">{cat.subtitle}</p>
+                      </div>
+                    </div>
+                    <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground/60" />
+                  </button>
+                );
+              })}
             </div>
           </div>
 
-          <div className="flex flex-col gap-6 md:col-span-7">
-            <Section title="PROFILE">
-              <Row
-                label="Name, college, prompt"
-                value={p.prompt ? `"${p.prompt}"` : ""}
-                onClick={() => setPanel("basics")}
-              />
-              <Row label="Photo" value="Replace or remove" onClick={() => setPanel("photo")} />
-              <Row
-                label="Social links"
-                value={
-                  socials.filter((s) => s.is_enabled).length > 0
-                    ? `${socials
-                        .filter((s) => s.is_enabled)
-                        .map((s) => s.platform)
-                        .join(", ")}`
-                    : socials.length > 0
-                      ? `${socials.length} added (hidden)`
-                      : "Add Instagram, Snapchat & more"
-                }
-                onClick={() => setPanel("socials")}
-              />
-              <Row
-                label="Garba quiz"
-                value={Object.values((p.quiz ?? {}) as Record<string, string>).join(" · ")}
-                onClick={() => setPanel("quiz")}
-              />
-              <Row
-                label="My nights"
-                value={
-                  goingNights(p.nights)
-                    .map((n) => `N${n}`)
-                    .join(" ") || "None"
-                }
-                onClick={() => setPanel("nights")}
-              />
-            </Section>
-
-            <Section title="WHO YOU SEE">
-              <div className="py-3">
-                <p className="mb-2 text-sm text-muted-foreground">Show me</p>
-                <Choice
-                  options={INTERESTS}
-                  value={p.interested_in}
-                  onChange={(v) => save({ interested_in: v })}
-                />
-              </div>
-              <div className="py-3">
-                <p className="mb-2 text-sm text-muted-foreground">
-                  Age range:{" "}
-                  <b className="text-foreground">
-                    {p.min_age}–{p.max_age}
-                  </b>
+          {/* RIGHT COLUMN: Focused Category View */}
+          <div className={cn("md:col-span-7", activeCategory === null && "hidden md:block")}>
+            {activeCategory === null ? (
+              // Desktop placeholder when no category explicitly selected
+              <div className="hidden md:flex flex-col items-center justify-center rounded-2xl border border-dashed border-border p-12 text-center text-muted-foreground h-full min-h-[400px]">
+                <Settings className="h-10 w-10 text-muted-foreground/40 mb-3" />
+                <h3 className="font-display text-lg font-bold text-primary">Select a Category</h3>
+                <p className="text-xs text-muted-foreground max-w-xs mt-1">
+                  Choose a category on the left to edit your personal profile, card, social links, or privacy settings.
                 </p>
-                <div className="flex items-center gap-3">
-                  <input
-                    type="range"
-                    min={18}
-                    max={60}
-                    value={p.min_age}
-                    className="flex-1 accent-[var(--action)]"
-                    onChange={(e) => save({ min_age: Math.min(+e.target.value, p.max_age) })}
-                  />
-                  <input
-                    type="range"
-                    min={18}
-                    max={60}
-                    value={p.max_age}
-                    className="flex-1 accent-[var(--action)]"
-                    onChange={(e) => save({ max_age: Math.max(+e.target.value, p.min_age) })}
-                  />
-                </div>
               </div>
-            </Section>
+            ) : (
+              // Active Category Panel
+              <div className="mx-5 md:mx-0 rounded-2xl border border-border/80 bg-card p-5 shadow-xs space-y-6">
+                {/* Header with Back button on mobile */}
+                <div className="flex items-center justify-between pb-3 border-b border-border/60">
+                  <div className="flex items-center gap-2.5">
+                    <button
+                      type="button"
+                      onClick={() => setActiveCategory(null)}
+                      className="md:hidden flex h-8 w-8 items-center justify-center rounded-lg border border-border text-foreground hover:bg-muted"
+                      aria-label="Back to settings list"
+                    >
+                      <ArrowLeft className="h-4 w-4" />
+                    </button>
+                    <div>
+                      <h2 className="font-display text-xl font-extrabold text-primary">
+                        {categories.find((c) => c.id === activeCategory)?.label}
+                      </h2>
+                      <p className="text-[11px] text-muted-foreground">
+                        {categories.find((c) => c.id === activeCategory)?.subtitle}
+                      </p>
+                    </div>
+                  </div>
+                </div>
 
-            <Invites me={p} onClaimed={recheck} />
+                {/* CATEGORY 1: MY PROFILE */}
+                {activeCategory === "my_profile" && (
+                  <MyProfileCategory
+                    p={p}
+                    photoUrl={p.photo_path ? urls[p.photo_path] : undefined}
+                    onSave={saveAndCheck}
+                  />
+                )}
 
-            <Section title="PRIVACY SETTINGS">
-              <Row
-                label="Who can discover you?"
-                value={
-                  !p.discoverable
-                    ? "Hidden from Discover"
-                    : (p as any).visibility_audiences?.includes("only_me") ||
-                        !(p as any).visibility_audiences?.length
-                      ? "Only Me · Hidden"
-                      : `${(p as any).visibility_audiences?.length} audience${(p as any).visibility_audiences?.length > 1 ? "s" : ""}`
-                }
-                onClick={() => setPanel("privacy")}
-              />
-              <Toggle
-                label="Hide me from Discover"
-                hint="Immediately removes your profile from new discovery results."
-                on={!p.discoverable}
-                onChange={(v) => save({ discoverable: !v })}
-              />
-              <Toggle
-                label="Show my college"
-                hint="Hide college and branch on your card."
-                on={p.show_college}
-                onChange={(v) => save({ show_college: v })}
-              />
-              <Row
-                label="Public card link & sharing"
-                value={
-                  p.public_profile_enabled ? "Enabled · Token protected" : "Disabled · Private"
-                }
-                onClick={() => setPanel("privacy")}
-              />
-              <BlockedList userId={p.id} />
-            </Section>
+                {/* CATEGORY 2: MY AFTER9 CARD */}
+                {activeCategory === "card" && (
+                  <MyCardCategory
+                    p={p}
+                    photoUrl={p.photo_path ? urls[p.photo_path] : undefined}
+                    onOpenStudio={() => setCardStudioOpen(true)}
+                    onSave={saveAndCheck}
+                    onReload={reload}
+                  />
+                )}
 
-            <Section title="APP & NOTIFICATIONS">
-              <PWAInstallCard />
-              <NotificationSettings
-                userId={p.id}
-                enabled={p.push_notifications_enabled ?? true}
-                onUpdate={recheck}
-              />
-            </Section>
+                {/* CATEGORY 3: SOCIAL LINKS */}
+                {activeCategory === "socials" && (
+                  <div className="space-y-4">
+                    <p className="text-xs text-muted-foreground leading-relaxed">
+                      Add your social links below. By default, links remain strictly private. You can choose to display them on your public share card or share only with mutual matches.
+                    </p>
+                    <SocialLinksManager userId={p.id} onLinksChanged={setSocials} />
+                  </div>
+                )}
+
+                {/* CATEGORY 4: DISCOVERY PREFERENCES */}
+                {activeCategory === "discovery" && (
+                  <DiscoveryCategory p={p} onSave={saveAndCheck} photoUrl={p.photo_path ? urls[p.photo_path] : undefined} />
+                )}
+
+                {/* CATEGORY 5: PRIVACY & SAFETY */}
+                {activeCategory === "privacy" && (
+                  <PrivacySafetyCategory p={p} onSave={saveAndCheck} />
+                )}
+
+                {/* CATEGORY 6: INVITATIONS */}
+                {activeCategory === "invites" && (
+                  <InvitationsCategory p={p} />
+                )}
+
+                {/* CATEGORY 7: APP & NOTIFICATIONS */}
+                {activeCategory === "notifications" && (
+                  <div className="space-y-6">
+                    <PWAInstallCard />
+                    <NotificationSettings
+                      userId={p.id}
+                      enabled={p.push_notifications_enabled ?? false}
+                      onUpdate={reload}
+                    />
+                  </div>
+                )}
+
+                {/* CATEGORY 8: ACCOUNT */}
+                {activeCategory === "account" && (
+                  <AccountCategory p={p} />
+                )}
+              </div>
+            )}
           </div>
         </div>
       </main>
+
       <BottomNav />
 
       {/* Share Card Studio Modal */}
       <ShareCardStudio
         open={cardStudioOpen}
         onOpenChange={setCardStudioOpen}
-        cardData={{
-          photoUrl: p.photo_path ? (urls[p.photo_path] ?? null) : null,
-          name: p.first_name ?? "Me",
-          age: p.birth_date ? ageFrom(p.birth_date) : null,
-          college: p.show_college ? (p.college ?? null) : null,
-          branch: p.show_college ? (p.branch ?? null) : null,
-          prompt: p.prompt ?? null,
-          nights: goingNights(p.nights),
-          shareUrl: `${typeof window !== "undefined" ? window.location.origin : ""}/p/${p.share_token}`,
-          city: "Raipur",
-          generalArea: p.general_area ?? null,
-        }}
-        socialLinks={socials}
-        savedPreferences={(p.card_preferences as Partial<CardCustomization> | null) ?? null}
         userId={p.id}
+        socialLinks={socials}
+        savedPreferences={(p.card_preferences as any) ?? null}
+        cardData={{
+          name: p.first_name ?? "",
+          age: p.birth_date ? ageFrom(p.birth_date) : null,
+          college: p.show_college ? p.college : null,
+          branch: p.show_college ? p.branch : null,
+          city: "Raipur",
+          generalArea: (p as any).general_area ?? null,
+          prompt: p.prompt ?? "",
+          photoUrl: (p.photo_path && urls[p.photo_path]) ? urls[p.photo_path]! : null,
+          nights: Array.isArray(p.nights) ? (p.nights as number[]) : [],
+          shareUrl: `${typeof window !== "undefined" ? window.location.origin : ""}/p/${p.share_token}`,
+        }}
       />
     </Shell>
   );
 }
 
-function YourAfter9CardHero({
+// ==========================================
+// CATEGORY 1: MY PROFILE
+// ==========================================
+function MyProfileCategory({
   p,
   photoUrl,
-  onOpenStudio,
-}: {
-  p: ProfileRow;
-  photoUrl?: string | null | undefined;
-  onOpenStudio: () => void;
-}) {
-  const [copied, setCopied] = useState(false);
-  const shareUrl = `${typeof window !== "undefined" ? window.location.origin : ""}/p/${p.share_token}`;
-  const nightsCount = goingNights(p.nights).length;
-
-  const copyLink = async () => {
-    try {
-      await navigator.clipboard.writeText(shareUrl);
-      setCopied(true);
-      toast.success("Public card link copied!");
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      toast.error("Could not copy link");
-    }
-  };
-
-  return (
-    <Section title="YOUR AFTER9 CARD">
-      <div className="overflow-hidden rounded-2xl border border-action/30 bg-gradient-to-br from-card via-card to-action/10 p-4 shadow-sm transition-all hover:border-action/50">
-        <div className="flex items-start gap-4">
-          {/* 9:16 Mini Card Thumbnail */}
-          <button
-            type="button"
-            onClick={onOpenStudio}
-            className="group relative aspect-[9/16] w-20 shrink-0 overflow-hidden rounded-xl border border-border/80 bg-neutral-900 shadow-md transition-transform active:scale-95 hover:ring-2 hover:ring-action/60"
-            aria-label="Open Card Customizer"
-          >
-            {photoUrl ? (
-              <img
-                src={photoUrl}
-                alt=""
-                className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
-              />
-            ) : (
-              <div className="flex h-full w-full items-center justify-center bg-plum text-xl font-bold text-ivory">
-                {p.first_name?.[0] ?? "A"}
-              </div>
-            )}
-            <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/20 to-transparent pointer-events-none" />
-            <div className="absolute bottom-1.5 left-1.5 right-1.5 text-left pointer-events-none">
-              <p className="font-display text-[9px] font-extrabold leading-tight text-white drop-shadow truncate">
-                {p.first_name}
-              </p>
-              <p className="text-[7px] font-medium text-white/80 truncate">
-                {nightsCount} {nightsCount === 1 ? "night" : "nights"}
-              </p>
-            </div>
-            <span className="absolute top-1.5 right-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-action/90 text-[8px] text-white shadow">
-              ✨
-            </span>
-          </button>
-
-          {/* Content & Actions */}
-          <div className="min-w-0 flex-1 space-y-1.5">
-            <div className="flex items-center gap-1.5">
-              <span className="inline-flex items-center gap-1 rounded-full bg-action/15 px-2 py-0.5 text-[10px] font-bold text-action uppercase tracking-wide">
-                <Sparkles className="h-3 w-3" />
-                1080 × 1920 Story Card
-              </span>
-            </div>
-
-            <h3 className="font-display text-base font-extrabold text-primary leading-snug">
-              Your Navratri Story Card
-            </h3>
-
-            <p className="text-xs text-muted-foreground leading-relaxed">
-              Clean 1080 × 1920 social card for Instagram Story & WhatsApp. 3 themes, crop
-              positioning, and privacy toggles.
-            </p>
-
-            <div className="flex flex-wrap items-center gap-2 pt-1.5">
-              <button
-                type="button"
-                onClick={onOpenStudio}
-                className="inline-flex items-center gap-1.5 rounded-xl bg-action px-3 py-1.5 text-xs font-bold text-action-foreground shadow-xs transition hover:opacity-95 active:scale-98"
-              >
-                <Sparkles className="h-3.5 w-3.5" />
-                Customize & Share
-              </button>
-
-              {p.public_profile_enabled && (
-                <button
-                  type="button"
-                  onClick={copyLink}
-                  className="inline-flex items-center gap-1 rounded-xl border border-border bg-card px-2.5 py-1.5 text-xs font-semibold text-muted-foreground transition hover:text-foreground hover:bg-muted"
-                  title="Copy public card link"
-                >
-                  {copied ? (
-                    <Check className="h-3.5 w-3.5 text-emerald-600" />
-                  ) : (
-                    <Copy className="h-3.5 w-3.5" />
-                  )}
-                  <span>{copied ? "Copied" : "Copy Link"}</span>
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
-    </Section>
-  );
-}
-
-function Section({ title, children }: { title: string; children: ReactNode }) {
-  return (
-    <section className="px-5 md:px-0">
-      <h2 className="mb-1 text-xs font-semibold tracking-widest text-action">{title}</h2>
-      {children}
-    </section>
-  );
-}
-function Row({ label, value, onClick }: { label: string; value: string; onClick: () => void }) {
-  return (
-    <button
-      onClick={onClick}
-      className="touch-tactile flex min-h-[48px] w-full items-center justify-between gap-4 border-b border-border py-3.5 px-2 -mx-2 text-left rounded-lg transition-colors hover:bg-muted/40 active:bg-muted/60"
-    >
-      <span className="min-w-0 pr-2">
-        <span className="block font-medium">{label}</span>
-        <span className="line-clamp-1 text-sm text-muted-foreground">{value}</span>
-      </span>
-      <span className="text-muted-foreground shrink-0 text-lg">›</span>
-    </button>
-  );
-}
-function Toggle({
-  label,
-  hint,
-  on,
-  onChange,
-}: {
-  label: string;
-  hint: string;
-  on: boolean;
-  onChange: (v: boolean) => void;
-}) {
-  return (
-    <button
-      onClick={() => onChange(!on)}
-      className="touch-tactile flex min-h-[48px] w-full items-center justify-between gap-4 border-b border-border py-3.5 px-2 -mx-2 text-left rounded-lg transition-colors hover:bg-muted/40 active:scale-[0.99]"
-      role="switch"
-      aria-checked={on}
-    >
-      <span className="min-w-0 pr-2">
-        <span className="block font-medium">{label}</span>
-        <span className="text-sm text-muted-foreground">{hint}</span>
-      </span>
-      <span
-        className={cn(
-          "relative h-7 w-12 shrink-0 rounded-full transition",
-          on ? "bg-action" : "bg-border",
-        )}
-      >
-        <span
-          className={cn(
-            "absolute top-1 h-5 w-5 rounded-full bg-background transition-all",
-            on ? "left-6" : "left-1",
-          )}
-        />
-      </span>
-    </button>
-  );
-}
-
-function BlockedList({ userId }: { userId: string }) {
-  const [list, setList] = useState<{ blocked_id: string }[] | null>(null);
-  const load = () =>
-    supabase
-      .from("blocks")
-      .select("blocked_id")
-      .eq("blocker_id", userId)
-      .then(({ data }) => setList(data ?? []));
-  if (list === null) return <Row label="Blocked people" value="Tap to view" onClick={load} />;
-  return (
-    <div className="border-b border-border py-3">
-      <p className="font-medium">Blocked people</p>
-      {list.length === 0 ? (
-        <p className="text-sm text-muted-foreground">Nobody blocked.</p>
-      ) : (
-        list.map((b, i) => (
-          <div key={b.blocked_id} className="flex items-center justify-between py-1 text-sm">
-            <span className="text-muted-foreground">Blocked person {i + 1}</span>
-            <button
-              className="font-semibold text-primary"
-              onClick={async () => {
-                await supabase
-                  .from("blocks")
-                  .delete()
-                  .eq("blocker_id", userId)
-                  .eq("blocked_id", b.blocked_id);
-                load();
-              }}
-            >
-              Unblock
-            </button>
-          </div>
-        ))
-      )}
-    </div>
-  );
-}
-
-function Editor({
-  panel,
-  p,
-  photoUrl,
-  socials,
-  onSocialsChange,
-  onClose,
   onSave,
-  onReload,
 }: {
-  panel: Exclude<Panel, null>;
   p: ProfileRow;
   photoUrl?: string | undefined;
-  socials: SocialLinkRow[];
-  onSocialsChange: (s: SocialLinkRow[]) => void;
-  onClose: () => void;
-  onSave: (patch: Partial<ProfileRow>) => void;
-  onReload: () => Promise<void>;
+  onSave: (patch: Partial<ProfileRow>) => Promise<void>;
 }) {
-  const [f, setF] = useState({
-    first_name: p.first_name ?? "",
-    college: p.college ?? "",
-    branch: p.branch ?? "",
-    general_area: (p as any).general_area ?? "",
-    prompt: p.prompt ?? "",
-  });
+  const [firstName, setFirstName] = useState(p.first_name ?? "");
+  const [birthDate, setBirthDate] = useState(p.birth_date ?? "");
+  const [college, setCollege] = useState(p.college ?? "");
+  const [branch, setBranch] = useState(p.branch ?? "");
+  const [generalArea, setGeneralArea] = useState((p as any).general_area ?? "");
+  const [promptText, setPromptText] = useState(p.prompt ?? "");
   const [photo, setPhoto] = useState<{ path: string | null; preview?: string | undefined }>({
     path: p.photo_path,
     preview: photoUrl,
   });
   const [quiz, setQuiz] = useState((p.quiz ?? {}) as Record<string, string>);
   const [nights, setNights] = useState((p.nights ?? {}) as Record<string, Attendance>);
+  const [saving, setSaving] = useState(false);
 
-  const title = {
-    basics: "Edit profile",
-    photo: "Your photo",
-    quiz: "Garba quiz",
-    nights: "My nights",
-    socials: "Social links",
-    privacy: "Who can discover you? · Privacy",
-  }[panel];
+  const handleSave = async () => {
+    if (!firstName.trim()) {
+      toast.error("Please enter your name.");
+      return;
+    }
+    if (birthDate) {
+      const v = validateBirthDate(birthDate);
+      if (!v.valid) {
+        toast.error(v.error || "Please enter a valid birth date (18+).");
+        return;
+      }
+    }
 
-  const patch: Partial<ProfileRow> =
-    panel === "basics"
-      ? ({
-          first_name: f.first_name.trim(),
-          college: f.college.trim() || null,
-          branch: f.branch.trim() || null,
-          general_area: f.general_area.trim() || null,
-          prompt: f.prompt.trim(),
-        } as any)
-      : panel === "photo"
-        ? { photo_path: photo.path }
-        : panel === "quiz"
-          ? { quiz }
-          : { nights };
-  const valid =
-    panel === "basics"
-      ? !!f.first_name.trim()
-      : panel === "photo"
-        ? !!photo.path
-        : panel === "nights"
-          ? goingNights(nights).length > 0
-          : true;
+    setSaving(true);
+    try {
+      if (p.photo_path && p.photo_path !== photo.path) {
+        await supabase.storage.from("photos").remove([p.photo_path]);
+      }
+      await onSave({
+        first_name: firstName.trim(),
+        birth_date: birthDate || null,
+        college: college.trim() || null,
+        branch: branch.trim() || null,
+        general_area: generalArea.trim() || null,
+        prompt: promptText.trim() || null,
+        photo_path: photo.path,
+        quiz,
+        nights,
+      } as any);
+      toast.success("Profile saved successfully!");
+    } catch (err: any) {
+      toast.error(err.message || "Failed to save profile.");
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
-    <Shell maxWidth="default">
-      <header className="mx-auto flex w-full max-w-xl items-center gap-4 px-5 pt-5">
-        <button onClick={onClose} className="text-2xl text-primary" aria-label="Back">
-          ←
-        </button>
-        <h1 className="font-display text-2xl font-extrabold text-primary">{title}</h1>
-      </header>
-      <div className="mx-auto flex w-full max-w-xl flex-1 animate-rise flex-col gap-6 px-5 pb-6 pt-8">
-        {panel === "basics" && (
-          <>
-            <div>
-              <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1 block">
-                First name
-              </label>
-              <input
-                className={fieldInput}
-                placeholder="First name"
-                value={f.first_name}
-                onChange={(e) => setF({ ...f, first_name: e.target.value })}
-              />
-            </div>
-            <div>
-              <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1 block">
-                College (Optional · Can change or clear anytime)
-              </label>
-              <input
-                className={fieldInput}
-                placeholder="College"
-                value={f.college}
-                onChange={(e) => setF({ ...f, college: e.target.value })}
-              />
-            </div>
-            <div>
-              <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1 block">
-                Branch · Year (Optional)
-              </label>
-              <input
-                className={fieldInput}
-                placeholder="Branch · Year (optional)"
-                value={f.branch}
-                onChange={(e) => setF({ ...f, branch: e.target.value })}
-              />
-            </div>
-            <div>
-              <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1 block">
-                General area in Raipur (Coarse neighborhood only)
-              </label>
-              <input
-                className={fieldInput}
-                placeholder="General area (e.g., Telibandha, Shankar Nagar, Bhilai)"
-                value={f.general_area}
-                onChange={(e) => setF({ ...f, general_area: e.target.value })}
-              />
-            </div>
-            <div>
-              <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1 block">
-                Garba prompt
-              </label>
-              <input
-                className={fieldInput}
-                maxLength={70}
-                placeholder="Garba night isn't complete without…"
-                value={f.prompt}
-                onChange={(e) => setF({ ...f, prompt: e.target.value })}
-              />
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Changing your name, prompt or photo re-checks your profile.
-            </p>
-          </>
-        )}
-        {panel === "photo" && (
-          <PhotoPicker
-            userId={p.id}
-            url={photo.preview}
-            onUploaded={(path, preview) => setPhoto({ path, preview })}
-            onRemove={() => setPhoto({ path: null })}
-          />
-        )}
-        {panel === "quiz" &&
-          QUIZ.map((q) => (
-            <div key={q.key}>
-              <p className="mb-2 font-semibold">{q.q}</p>
-              <OptionList
-                options={q.options}
-                value={quiz[q.key]}
-                onPick={(o) => setQuiz({ ...quiz, [q.key]: o })}
-              />
-            </div>
-          ))}
-        {panel === "nights" && <NightsPicker value={nights} onChange={setNights} />}
-
-        {panel === "socials" && (
-          <div className="flex flex-col gap-4">
-            <SocialLinksManager userId={p.id} onLinksChanged={onSocialsChange} />
-            <Btn className="mt-4" onClick={onClose}>
-              Done
-            </Btn>
-          </div>
-        )}
-
-        {panel === "privacy" && (
-          <PrivacyPanel
-            p={p}
-            photoUrl={photoUrl}
-            onSave={onSave}
-            onReload={onReload}
-            onClose={onClose}
-          />
-        )}
-
-        {panel !== "socials" && panel !== "privacy" && (
-          <Btn
-            className="mt-auto"
-            disabled={!valid}
-            onClick={async () => {
-              if (panel === "photo" && p.photo_path && p.photo_path !== photo.path)
-                await supabase.storage.from("photos").remove([p.photo_path]);
-              onSave(patch);
-            }}
-          >
-            Save
-          </Btn>
-        )}
+    <div className="space-y-5">
+      {/* Photo Picker */}
+      <div>
+        <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-2 block">
+          Profile Photo
+        </label>
+        <PhotoPicker
+          userId={p.id}
+          url={photo.preview}
+          onUploaded={(path, preview) => setPhoto({ path, preview })}
+          onRemove={() => setPhoto({ path: null })}
+        />
       </div>
-    </Shell>
+
+      {/* Name and Birthday */}
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div>
+          <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1 block">
+            First Name
+          </label>
+          <input
+            className={fieldInput}
+            placeholder="First name"
+            value={firstName}
+            onChange={(e) => setFirstName(e.target.value)}
+          />
+        </div>
+        <div>
+          <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1 block">
+            Birthday (YYYY-MM-DD)
+          </label>
+          <input
+            type="date"
+            className={fieldInput}
+            value={birthDate}
+            onChange={(e) => setBirthDate(e.target.value)}
+          />
+        </div>
+      </div>
+
+      {/* College and Branch */}
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div>
+          <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1 block">
+            College / University
+          </label>
+          <input
+            className={fieldInput}
+            placeholder="e.g. NIT Raipur, AIIMS"
+            value={college}
+            onChange={(e) => setCollege(e.target.value)}
+          />
+        </div>
+        <div>
+          <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1 block">
+            Branch · Year (Optional)
+          </label>
+          <input
+            className={fieldInput}
+            placeholder="e.g. CSE · 3rd Year"
+            value={branch}
+            onChange={(e) => setBranch(e.target.value)}
+          />
+        </div>
+      </div>
+
+      {/* General Area */}
+      <div>
+        <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1 block">
+          General Area in Raipur (Coarse neighborhood only)
+        </label>
+        <input
+          className={fieldInput}
+          placeholder="e.g. Telibandha, Shankar Nagar, Pandri"
+          value={generalArea}
+          onChange={(e) => setGeneralArea(e.target.value)}
+        />
+      </div>
+
+      {/* Prompt */}
+      <div>
+        <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1 block">
+          Garba Prompt
+        </label>
+        <input
+          className={fieldInput}
+          maxLength={70}
+          placeholder="Garba night isn't complete without…"
+          value={promptText}
+          onChange={(e) => setPromptText(e.target.value)}
+        />
+      </div>
+
+      {/* Garba Quiz */}
+      <div className="space-y-4 pt-2 border-t border-border/60">
+        <h3 className="font-display text-sm font-bold text-primary">Garba Quiz & Preferences</h3>
+        {QUIZ.map((q) => (
+          <div key={q.key} className="space-y-1.5">
+            <p className="text-xs font-semibold text-foreground">{q.q}</p>
+            <OptionList
+              options={q.options}
+              value={quiz[q.key]}
+              onPick={(o) => setQuiz({ ...quiz, [q.key]: o })}
+            />
+          </div>
+        ))}
+      </div>
+
+      {/* Nights Picker */}
+      <div className="space-y-2 pt-2 border-t border-border/60">
+        <h3 className="font-display text-sm font-bold text-primary">Nights You're Attending</h3>
+        <NightsPicker value={nights} onChange={setNights} />
+      </div>
+
+      <div className="pt-3">
+        <Btn onClick={handleSave} disabled={saving} className="w-full">
+          {saving ? "Saving…" : "Save Profile Changes"}
+        </Btn>
+      </div>
+    </div>
   );
 }
 
-function PrivacyPanel({
+// ==========================================
+// CATEGORY 2: MY AFTER9 CARD
+// ==========================================
+function MyCardCategory({
   p,
   photoUrl,
+  onOpenStudio,
   onSave,
   onReload,
-  onClose,
 }: {
   p: ProfileRow;
   photoUrl?: string | undefined;
-  onSave: (patch: Partial<ProfileRow>) => void;
+  onOpenStudio: () => void;
+  onSave: (patch: Partial<ProfileRow>) => Promise<void>;
   onReload: () => Promise<void>;
-  onClose: () => void;
 }) {
-  const [audiences, setAudiences] = useState<string[]>(
-    (p as any).visibility_audiences?.length ? (p as any).visibility_audiences : ["only_me"],
-  );
-  const [college, setCollege] = useState(p.college || "");
-  const [generalArea, setGeneralArea] = useState((p as any).general_area || "");
-  const [discoverable, setDiscoverable] = useState(p.discoverable);
-
   const [publicEnabled, setPublicEnabled] = useState(p.public_profile_enabled);
   const [regenerating, setRegenerating] = useState(false);
   const [copied, setCopied] = useState(false);
   const publicUrl = `${typeof window !== "undefined" ? window.location.origin : ""}/p/${p.share_token}`;
 
-  const handleAudienceChange = (newAuds: string[]) => {
-    setAudiences(newAuds);
-    onSave({ visibility_audiences: newAuds } as any);
-    toast.success("Discovery audience updated.");
-  };
-
-  const handleCollegeChange = (c: string | null) => {
-    setCollege(c || "");
-    onSave({ college: c ? c.trim() : null });
-  };
-
-  const handleGeneralAreaChange = (a: string | null) => {
-    setGeneralArea(a || "");
-    onSave({ general_area: a ? a.trim() : null } as any);
-  };
-
-  const handleToggleDiscoverable = (disc: boolean) => {
-    setDiscoverable(disc);
-    onSave({ discoverable: disc });
-    toast.success(disc ? "Discover enabled!" : "Hidden from Discover.");
-  };
-
-  const togglePublic = (enabled: boolean) => {
+  const togglePublic = async (enabled: boolean) => {
     setPublicEnabled(enabled);
-    onSave({ public_profile_enabled: enabled });
-    toast.success(enabled ? "Public profile card enabled!" : "Public profile card disabled.");
+    await onSave({ public_profile_enabled: enabled });
+    toast.success(enabled ? "Public card enabled!" : "Public card disabled.");
   };
 
   const copyUrl = async () => {
     try {
       await navigator.clipboard.writeText(publicUrl);
       setCopied(true);
-      toast.success("Public card link copied!");
+      toast.success("Card link copied!");
       setTimeout(() => setCopied(false), 2000);
     } catch {
       toast.error("Could not copy link.");
@@ -855,48 +706,47 @@ function PrivacyPanel({
   };
 
   const handleRegenerate = async () => {
-    if (!confirm("Regenerate your secret link? Your previous link will immediately stop working."))
-      return;
+    if (!confirm("Regenerate your secret link? The previous link will immediately stop working.")) return;
     setRegenerating(true);
     try {
       const { error } = await supabase.rpc("regenerate_share_token");
       if (error) throw error;
       await onReload();
-      toast.success("New secret link generated! Previous link revoked.");
-    } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : "Failed to regenerate link");
+      toast.success("New secret link generated!");
+    } catch (err: any) {
+      toast.error(err.message || "Failed to regenerate link");
     } finally {
       setRegenerating(false);
     }
   };
 
   return (
-    <div className="flex flex-col gap-6">
-      {/* 1. Profile Visibility Meter */}
-      <ProfileVisibilityMeter
-        audiences={audiences}
-        onChangeAudiences={handleAudienceChange}
-        college={college}
-        onChangeCollege={handleCollegeChange}
-        generalArea={generalArea}
-        onChangeGeneralArea={handleGeneralAreaChange}
-        discoverable={discoverable}
-        onToggleDiscoverable={handleToggleDiscoverable}
-        userFirstName={p.first_name}
-        userAge={p.birth_date ? ageFrom(p.birth_date) : null}
-        userPhotoUrl={photoUrl}
-        userPrompt={p.prompt}
-        userNightsCount={goingNights(p.nights).length}
-      />
+    <div className="space-y-5">
+      {/* Customize Card Button */}
+      <div className="rounded-2xl border border-action/40 bg-gradient-to-br from-card to-action/10 p-4 space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Sparkles className="h-4 w-4 text-action" />
+            <h3 className="font-display text-sm font-bold text-primary">Custom Card Design</h3>
+          </div>
+          <button
+            onClick={onOpenStudio}
+            className="rounded-xl bg-primary px-3 py-1.5 text-xs font-bold text-primary-foreground hover:opacity-90"
+          >
+            Open Card Studio ↗
+          </button>
+        </div>
+        <p className="text-xs text-muted-foreground leading-relaxed">
+          Choose from Editorial, Minimal, or Festival styles, customize festive color themes, and export at 1080 × 1920 Instagram Story resolution.
+        </p>
+      </div>
 
-      {/* 2. Public Profile Card */}
+      {/* Public Profile Card Toggle */}
       <div className="rounded-2xl border border-border bg-card p-4 space-y-2">
         <div className="flex items-center justify-between">
           <div>
-            <h3 className="font-display text-base font-bold text-primary">Public Profile Card</h3>
-            <p className="text-xs text-muted-foreground">
-              Allow anyone with your secret link to view your verified card
-            </p>
+            <h3 className="font-display text-sm font-bold text-primary">Public Profile Card</h3>
+            <p className="text-xs text-muted-foreground">Allow anyone with your secret link to view your verified card</p>
           </div>
           <button
             type="button"
@@ -905,67 +755,52 @@ function PrivacyPanel({
             onClick={() => togglePublic(!publicEnabled)}
             className={cn(
               "relative h-7 w-12 shrink-0 rounded-full transition",
-              publicEnabled ? "bg-action" : "bg-border",
+              publicEnabled ? "bg-action" : "bg-border"
             )}
           >
             <span
               className={cn(
                 "absolute top-1 h-5 w-5 rounded-full bg-background transition-all",
-                publicEnabled ? "left-6" : "left-1",
+                publicEnabled ? "left-6" : "left-1"
               )}
             />
           </button>
         </div>
-        <p className="text-xs text-muted-foreground leading-relaxed pt-1 border-t border-border/40">
-          When enabled, anyone who taps your Instagram Story link can view your safe Navratri card
-          without an account. When turned off, the link displays as private.
+        <p className="text-xs text-muted-foreground pt-1 border-t border-border/40">
+          When enabled, friends who tap your Instagram Story or WhatsApp link can view your safe Navratri card without an account.
         </p>
       </div>
 
       {/* Share Link Box */}
-      <div
-        className={cn(
-          "rounded-2xl border bg-card p-4 space-y-3 transition",
-          publicEnabled ? "border-action/40" : "border-border opacity-70",
-        )}
-      >
+      <div className="rounded-2xl border border-border bg-card p-4 space-y-3">
         <div className="flex items-center justify-between">
-          <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
-            Your Secret Public URL
-          </span>
-          <span
-            className={cn(
-              "text-[10px] font-bold px-2 py-0.5 rounded-full",
-              publicEnabled
-                ? "bg-emerald-500/15 text-emerald-600"
-                : "bg-neutral-200 text-neutral-600",
-            )}
-          >
+          <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Your Public URL</span>
+          <span className={cn(
+            "text-[10px] font-bold px-2 py-0.5 rounded-full",
+            publicEnabled ? "bg-emerald-500/15 text-emerald-600" : "bg-muted text-muted-foreground"
+          )}>
             {publicEnabled ? "Active" : "Disabled"}
           </span>
         </div>
-
-        <div className="rounded-xl border border-border/80 bg-background/80 p-3 select-all">
+        <div className="rounded-xl border border-border/80 bg-background/80 p-2.5 select-all">
           <p className="font-mono text-xs font-semibold text-primary truncate">{publicUrl}</p>
         </div>
-
-        <div className="flex items-center gap-2 pt-1">
+        <div className="flex items-center gap-2">
           <button
             type="button"
             disabled={!publicEnabled}
             onClick={copyUrl}
-            className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-xl bg-primary px-3 py-2.5 text-xs font-bold text-primary-foreground shadow-xs transition hover:opacity-90 disabled:opacity-50"
+            className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-xl bg-primary px-3 py-2 text-xs font-bold text-primary-foreground disabled:opacity-50"
           >
             {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
             {copied ? "Link Copied!" : "Copy Link"}
           </button>
-
           {publicEnabled && (
             <a
               href={`/p/${p.share_token}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center justify-center gap-1 rounded-xl border border-border bg-card px-3 py-2.5 text-xs font-semibold text-foreground transition hover:bg-muted"
+              className="inline-flex items-center justify-center gap-1 rounded-xl border border-border bg-card px-3 py-2 text-xs font-semibold text-foreground hover:bg-muted"
             >
               <ExternalLink className="h-3.5 w-3.5" />
               Preview
@@ -974,140 +809,266 @@ function PrivacyPanel({
         </div>
       </div>
 
-      {/* Revoke / Regenerate Token */}
-      <div className="rounded-2xl border border-border bg-card p-4 space-y-3">
-        <div className="flex items-center gap-2">
-          <RefreshCw className="h-4 w-4 text-action" />
-          <h3 className="font-display text-sm font-bold text-primary">Revoke & Regenerate Link</h3>
-        </div>
-        <p className="text-xs text-muted-foreground leading-relaxed">
-          If you shared your card previously and want to disable that link completely, click below
-          to generate a new opaque token. The old URL will stop working immediately.
+      {/* Revoke Token */}
+      <div className="rounded-2xl border border-border bg-card p-4 space-y-2">
+        <h3 className="font-display text-sm font-bold text-primary">Revoke & Regenerate Link</h3>
+        <p className="text-xs text-muted-foreground">
+          If you shared your card previously and want to disable that link completely, click below to generate a new opaque token.
         </p>
         <button
           type="button"
           disabled={regenerating}
           onClick={handleRegenerate}
-          className="inline-flex items-center gap-1.5 rounded-xl border border-destructive/40 bg-destructive/10 px-3.5 py-2 text-xs font-bold text-destructive transition hover:bg-destructive/20 disabled:opacity-50"
+          className="inline-flex items-center gap-1.5 rounded-xl border border-destructive/40 bg-destructive/10 px-3 py-1.5 text-xs font-bold text-destructive hover:bg-destructive/20 disabled:opacity-50"
         >
           <RefreshCw className={cn("h-3.5 w-3.5", regenerating && "animate-spin")} />
           {regenerating ? "Regenerating…" : "Revoke Old Link & Generate New"}
         </button>
       </div>
-
-      {/* Privacy Guarantee Info Cards */}
-      <div className="rounded-2xl border border-border/80 bg-muted/40 p-4 space-y-2.5 text-xs">
-        <div className="flex items-center gap-1.5 font-bold text-primary">
-          <ShieldCheck className="h-4 w-4 text-emerald-600" />
-          <span>After9 Privacy Architecture</span>
-        </div>
-        <ul className="space-y-1.5 text-muted-foreground text-[11px] leading-relaxed">
-          <li>
-            • <b className="text-foreground">Private by Default:</b> Phone numbers, birth date, and
-            exact age are never accessible publicly.
-          </li>
-          <li>
-            • <b className="text-foreground">Opaque Tokens:</b> Internal database IDs are never in
-            your URLs. Tokens can be revoked anytime.
-          </li>
-          <li>
-            • <b className="text-foreground">No Search Indexing:</b> Public preview pages include
-            strict{" "}
-            <code className="text-[10px] bg-card px-1 py-0.5 rounded">noindex, nofollow</code> tags.
-          </li>
-          <li>
-            • <b className="text-foreground">Social Privacy:</b> Handles only display if toggled on
-            your card or revealed to mutual Dandiya clashes.
-          </li>
-        </ul>
-      </div>
-
-      <Btn onClick={onClose}>Done</Btn>
     </div>
   );
 }
 
-type Invite = {
-  code: string;
-  revoked: boolean;
-  expires_at: string | null;
-  claimed_at: string | null;
-  friend_name: string | null;
-  friend_onboarded: boolean | null;
-  friend_status: string | null;
-};
-function Invites({ me, onClaimed }: { me: ProfileRow; onClaimed: () => void }) {
-  const ensure = useServerFn(ensureInvites);
-  const claim = useServerFn(claimInvite);
-  const revoke = useServerFn(revokeInvite);
-  const [list, setList] = useState<Invite[]>([]);
-  const [primaryCode, setPrimaryCode] = useState<string | null>(null);
-  const [note, setNote] = useState("");
-  const [code, setCode] = useState("");
+// ==========================================
+// CATEGORY 4: DISCOVERY PREFERENCES
+// ==========================================
+function DiscoveryCategory({
+  p,
+  onSave,
+  photoUrl,
+}: {
+  p: ProfileRow;
+  onSave: (patch: Partial<ProfileRow>) => Promise<void>;
+  photoUrl?: string | undefined;
+}) {
+  const [interestedIn, setInterestedIn] = useState(p.interested_in);
+  const [minAge, setMinAge] = useState(p.min_age);
+  const [maxAge, setMaxAge] = useState(p.max_age);
+  const [discoverable, setDiscoverable] = useState(p.discoverable);
+
+  const [audiences, setAudiences] = useState<string[]>(
+    (p as any).visibility_audiences?.length ? (p as any).visibility_audiences : ["only_me"]
+  );
+
+  return (
+    <div className="space-y-5">
+      {/* Show me preference */}
+      <div className="space-y-2">
+        <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground block">
+          Who do you want to meet?
+        </label>
+        <Choice
+          options={INTERESTS}
+          value={interestedIn}
+          onChange={(v) => {
+            setInterestedIn(v);
+            onSave({ interested_in: v });
+          }}
+        />
+      </div>
+
+      {/* Age range */}
+      <div className="space-y-2 rounded-2xl border border-border bg-card p-4">
+        <div className="flex items-center justify-between text-xs font-bold">
+          <span>Age Range</span>
+          <span className="text-primary font-mono">{minAge} – {maxAge} years</span>
+        </div>
+        <div className="flex items-center gap-3 pt-1">
+          <input
+            type="range"
+            min={18}
+            max={60}
+            value={minAge}
+            className="flex-1 accent-[var(--action)]"
+            onChange={(e) => {
+              const val = Math.min(+e.target.value, maxAge);
+              setMinAge(val);
+              onSave({ min_age: val });
+            }}
+          />
+          <input
+            type="range"
+            min={18}
+            max={60}
+            value={maxAge}
+            className="flex-1 accent-[var(--action)]"
+            onChange={(e) => {
+              const val = Math.max(+e.target.value, minAge);
+              setMaxAge(val);
+              onSave({ max_age: val });
+            }}
+          />
+        </div>
+      </div>
+
+      {/* Profile Discovery Audience Meter */}
+      <ProfileVisibilityMeter
+        audiences={audiences}
+        onChangeAudiences={(auds) => {
+          setAudiences(auds);
+          onSave({ visibility_audiences: auds } as any);
+        }}
+        college={p.college}
+        onChangeCollege={(c) => onSave({ college: c })}
+        generalArea={(p as any).general_area}
+        onChangeGeneralArea={(a) => onSave({ general_area: a } as any)}
+        discoverable={discoverable}
+        onToggleDiscoverable={(disc) => {
+          setDiscoverable(disc);
+          onSave({ discoverable: disc });
+        }}
+        userFirstName={p.first_name}
+        userAge={p.birth_date ? ageFrom(p.birth_date) : null}
+        userPhotoUrl={photoUrl}
+        userPrompt={p.prompt}
+        userNightsCount={goingNights(p.nights).length}
+      />
+    </div>
+  );
+}
+
+// ==========================================
+// CATEGORY 5: PRIVACY & SAFETY
+// ==========================================
+function PrivacySafetyCategory({
+  p,
+  onSave,
+}: {
+  p: ProfileRow;
+  onSave: (patch: Partial<ProfileRow>) => Promise<void>;
+}) {
+  const [showCollege, setShowCollege] = useState(p.show_college);
+  const [discoverable, setDiscoverable] = useState(p.discoverable);
+
+  return (
+    <div className="space-y-5">
+      {/* Toggle Hide me from Discover */}
+      <div className="rounded-2xl border border-border bg-card p-4 space-y-2">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="font-display text-sm font-bold text-primary">Hide me from Discover</h3>
+            <p className="text-xs text-muted-foreground">Immediately removes your profile from new discovery results</p>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={!discoverable}
+            onClick={() => {
+              const next = !discoverable;
+              setDiscoverable(!next);
+              onSave({ discoverable: !next });
+            }}
+            className={cn(
+              "relative h-7 w-12 shrink-0 rounded-full transition",
+              !discoverable ? "bg-action" : "bg-border"
+            )}
+          >
+            <span
+              className={cn(
+                "absolute top-1 h-5 w-5 rounded-full bg-background transition-all",
+                !discoverable ? "left-6" : "left-1"
+              )}
+            />
+          </button>
+        </div>
+      </div>
+
+      {/* Toggle Show College */}
+      <div className="rounded-2xl border border-border bg-card p-4 space-y-2">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="font-display text-sm font-bold text-primary">Show my college</h3>
+            <p className="text-xs text-muted-foreground">Display college & branch on your share card and profile</p>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={showCollege}
+            onClick={() => {
+              setShowCollege(!showCollege);
+              onSave({ show_college: !showCollege });
+            }}
+            className={cn(
+              "relative h-7 w-12 shrink-0 rounded-full transition",
+              showCollege ? "bg-action" : "bg-border"
+            )}
+          >
+            <span
+              className={cn(
+                "absolute top-1 h-5 w-5 rounded-full bg-background transition-all",
+                showCollege ? "left-6" : "left-1"
+              )}
+            />
+          </button>
+        </div>
+      </div>
+
+      {/* Blocked Users */}
+      <BlockedList userId={p.id} />
+
+      {/* Community Safety & Helpline Information */}
+      <div className="rounded-2xl border border-border/80 bg-muted/40 p-4 space-y-2 text-xs">
+        <div className="flex items-center gap-1.5 font-bold text-primary">
+          <ShieldCheck className="h-4 w-4 text-emerald-600" />
+          <span>After9 Safety & Community Standards</span>
+        </div>
+        <p className="text-[11px] text-muted-foreground leading-relaxed">
+          After9 is an adult (18+) community designed for safe Navratri and Garba meetups. We strictly prohibit harassment, impersonation, and non-consensual sharing.
+        </p>
+        <p className="text-[11px] text-muted-foreground">
+          <b>Raipur Emergency / Women Helpline:</b> 112 / 1091
+        </p>
+      </div>
+    </div>
+  );
+}
+
+// ==========================================
+// CATEGORY 6: INVITATIONS
+// ==========================================
+function InvitationsCategory({ p }: { p: ProfileRow }) {
+  const {
+    primaryCode,
+    availableCount,
+    claimedCount,
+    totalAllocation,
+    invites,
+    status,
+    error,
+    refresh,
+  } = useAuthoritativeInvites();
+
   const [copied, setCopied] = useState("");
   const [drawingCard, setDrawingCard] = useState(false);
 
-  const load = () =>
-    supabase.rpc("my_invites").then(({ data }) => setList((data ?? []) as Invite[]));
+  const inviteUrl = primaryCode ? `${window.location.origin}/?invite=${primaryCode}` : "";
 
-  useEffect(() => {
-    ensure()
-      .then((r) => {
-        if (r?.ok && r.primaryCode) setPrimaryCode(r.primaryCode);
-        load();
-      })
-      .catch(() => {
-        load();
-      });
-  }, [ensure]);
-
-  const activeCode =
-    primaryCode ?? list.find((i) => !i.claimed_at && !i.revoked)?.code ?? list[0]?.code ?? null;
-  const inviteUrl = activeCode ? `${location.origin}/?invite=${activeCode}` : "";
-
-  const copyLink = async (c = activeCode) => {
-    if (!c) return;
-    const url = `${location.origin}/?invite=${c}`;
+  const handleCopy = async (code = primaryCode) => {
+    if (!code) return;
+    const url = `${window.location.origin}/?invite=${code}`;
     try {
       await navigator.clipboard.writeText(url);
-      setCopied(c);
+      setCopied(code);
       toast.success("Invite link copied to clipboard! 📋");
-      setTimeout(() => setCopied(""), 2500);
+      setTimeout(() => setCopied(""), 2000);
     } catch {
-      toast.error("Couldn't copy link. Please copy manually.");
+      toast.error("Could not copy link.");
     }
   };
 
-  const shareWhatsApp = (c = activeCode) => {
-    if (!c) return;
-    const url = `${location.origin}/?invite=${c}`;
+  const handleWhatsApp = (code = primaryCode) => {
+    if (!code) return;
+    const url = `${window.location.origin}/?invite=${code}`;
     const text = `Hey! Join me on After9 for Navratri & Garba nights. Connect on the floor: ${url}`;
     window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`, "_blank");
   };
 
-  const shareNative = async (c = activeCode) => {
-    if (!c) return;
-    const url = `${location.origin}/?invite=${c}`;
-    if (navigator.share) {
-      try {
-        await navigator.share({
-          title: "After9 Festival Invite",
-          text: "Join me on After9 for Navratri & Garba nights. Connect on the floor!",
-          url,
-        });
-        return;
-      } catch {
-        /* user cancelled */
-      }
-    }
-    copyLink(c);
-  };
-
-  const shareCard = async (c: string) => {
+  const handleDrawCard = async (code = primaryCode) => {
+    if (!code) return;
     setDrawingCard(true);
     try {
-      await drawInviteCard(c, `${location.origin}/?invite=${c}&src=card`);
-      toast.success("Festival invite card created!");
+      await drawInviteCard(code, `${window.location.origin}/?invite=${code}&src=card`);
+      toast.success("Festival invite card created! 🎨");
     } catch {
       toast.error("Could not generate card.");
     } finally {
@@ -1115,378 +1076,232 @@ function Invites({ me, onClaimed }: { me: ProfileRow; onClaimed: () => void }) {
     }
   };
 
-  const status = (i: Invite) =>
-    i.claimed_at
-      ? "Used"
-      : i.revoked
-        ? "Cancelled"
-        : i.expires_at && new Date(i.expires_at) < new Date()
-          ? "Expired"
-          : null;
-  const available = list.filter(
-    (i) => !i.claimed_at && !i.revoked && (!i.expires_at || new Date(i.expires_at) > new Date()),
-  ).length;
-  const joined = list.filter((i) => i.claimed_at).length;
-  const finished = list.filter((i) => i.friend_onboarded).length;
-  const stage = (i: Invite) =>
-    !i.friend_onboarded
-      ? ["Signed up · setting up", "text-action"]
-      : i.friend_status === "approved"
-        ? ["Finished setup · live", "text-teal"]
-        : ["Finished setup · checking", "text-action"];
-
   return (
-    <Section title="INVITE FRIENDS TO AFTER9">
-      {/* Community Invite Hero Card */}
-      <div className="my-3 overflow-hidden rounded-2xl border border-action/40 bg-gradient-to-br from-card via-card to-action/10 p-5 shadow-sm space-y-4">
+    <div className="space-y-5">
+      {/* Community Invite Card */}
+      <div className="rounded-2xl border border-action/40 bg-gradient-to-br from-card to-action/10 p-5 space-y-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-action/20 text-action">
               <Ticket className="h-5 w-5" />
             </span>
             <div>
-              <p className="text-[11px] font-bold tracking-widest text-action uppercase">
-                COMMUNITY INVITES
-              </p>
-              <h3 className="font-display text-lg font-extrabold text-primary">
-                Invite Your Friends
-              </h3>
+              <p className="text-[11px] font-bold tracking-widest text-action uppercase">COMMUNITY INVITES</p>
+              <h3 className="font-display text-base font-extrabold text-primary">Invite Your Friends</h3>
             </div>
           </div>
           <span className="rounded-full bg-action/15 px-3 py-1 text-xs font-bold text-action">
-            {available} of {list.length || 5} Invites Left
+            {status === "loading" ? "Checking…" : `${availableCount} of ${totalAllocation} Invites Left`}
           </span>
         </div>
 
         <p className="text-xs text-muted-foreground leading-relaxed">
-          Share your personal invite link so your friends can connect with you on After9 during Navratri.
-          Keep invites for people you know.
+          Share your personal invite link so your friends can connect with you on After9 during Navratri. Each member receives {totalAllocation} invitations to maintain an authentic community.
         </p>
 
-        {/* Link box */}
-        <div className="rounded-xl border border-border/80 bg-background/90 p-3 space-y-1">
-          <p className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground">
-            Your Personal Invite Link
-          </p>
-          <p className="font-mono text-xs font-semibold text-primary truncate select-all">
-            {inviteUrl || "Loading your invite link…"}
-          </p>
-        </div>
+        {status === "error" ? (
+          <div className="rounded-xl border border-destructive/40 bg-destructive/10 p-3 space-y-2 text-center">
+            <p className="text-xs text-destructive font-semibold">{error || "Could not load invite link"}</p>
+            <button
+              onClick={refresh}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-background px-3 py-1.5 text-xs font-bold text-primary shadow-xs"
+            >
+              <RefreshCw className="h-3 w-3" /> Retry
+            </button>
+          </div>
+        ) : (
+          <div className="rounded-xl border border-border/80 bg-background/90 p-3 space-y-1">
+            <p className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground">Your Active Invite Link</p>
+            <p className="font-mono text-xs font-semibold text-primary truncate select-all">
+              {inviteUrl || (status === "loading" ? "Loading your invite link…" : "All invites claimed")}
+            </p>
+          </div>
+        )}
 
-        {/* Fast Action Buttons */}
         <div className="grid grid-cols-2 gap-2 pt-1">
           <button
             type="button"
-            onClick={() => copyLink()}
-            className="flex items-center justify-center gap-1.5 rounded-xl bg-primary px-3 py-2.5 text-xs font-bold text-primary-foreground shadow-xs transition hover:opacity-90 active:scale-98"
+            onClick={() => handleCopy()}
+            disabled={!primaryCode || status === "loading"}
+            className="flex items-center justify-center gap-1.5 rounded-xl bg-primary px-3 py-2.5 text-xs font-bold text-primary-foreground disabled:opacity-50"
           >
-            {copied === activeCode ? (
-              <Check className="h-3.5 w-3.5" />
-            ) : (
-              <Copy className="h-3.5 w-3.5" />
-            )}
-            {copied === activeCode ? "Link Copied!" : "Copy Link"}
+            {copied === primaryCode ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+            {copied === primaryCode ? "Link Copied!" : "Copy Link"}
           </button>
           <button
             type="button"
-            onClick={() => shareWhatsApp()}
-            className="flex items-center justify-center gap-1.5 rounded-xl bg-emerald-600 px-3 py-2.5 text-xs font-bold text-white shadow-xs transition hover:bg-emerald-700 active:scale-98"
+            onClick={() => handleWhatsApp()}
+            disabled={!primaryCode || status === "loading"}
+            className="flex items-center justify-center gap-1.5 rounded-xl bg-emerald-600 px-3 py-2.5 text-xs font-bold text-white hover:bg-emerald-700 disabled:opacity-50"
           >
             <Share2 className="h-3.5 w-3.5" />
             WhatsApp
           </button>
         </div>
-
-        <div className="grid grid-cols-2 gap-2">
-          {activeCode && (
-            <button
-              type="button"
-              disabled={drawingCard}
-              onClick={() => shareCard(activeCode)}
-              className="flex items-center justify-center gap-1.5 rounded-xl border border-action/40 bg-action/10 px-3 py-2 text-xs font-bold text-action transition hover:bg-action/20 disabled:opacity-50"
-            >
-              🎨 {drawingCard ? "Generating…" : "Festival Card"}
-            </button>
-          )}
-          <button
-            type="button"
-            onClick={() => shareNative()}
-            className="flex items-center justify-center gap-1.5 rounded-xl border border-border bg-card px-3 py-2 text-xs font-bold text-foreground transition hover:bg-muted"
-          >
-            <Share2 className="h-3.5 w-3.5" />
-            More options
-          </button>
-        </div>
       </div>
 
-      <Link
-        to="/invites"
-        className="my-2 flex items-center justify-between rounded-xl border border-border bg-card px-4 py-3 transition hover:border-action/40"
-      >
-        <span className="text-sm font-semibold">
-          Invite list — save friends' emails & send codes
-        </span>
-        <span className="text-primary font-bold">→</span>
-      </Link>
+      {/* Redemption History */}
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <h3 className="font-display text-sm font-bold text-primary">Your Invite Passes ({invites.length})</h3>
+          <Link to="/invites" className="text-xs font-semibold text-action hover:underline">
+            Manage Friends List ↗
+          </Link>
+        </div>
 
-      {list.length > 0 && (
-        <div className="grid grid-cols-3 gap-2 py-3 text-center">
-          {[
-            ["Total Passes", list.length],
-            ["Joined", joined],
-            ["Finished setup", finished],
-          ].map(([l, n]) => (
-            <div key={l} className="rounded-xl border border-border bg-card py-3">
-              <p className="font-display text-2xl font-extrabold text-primary">{n}</p>
-              <p className="text-xs text-muted-foreground">{l}</p>
+        <div className="rounded-2xl border border-border bg-card divide-y divide-border/60 overflow-hidden text-xs">
+          {invites.map((inv) => (
+            <div key={inv.code} className="flex items-center justify-between p-3">
+              <div>
+                <p className="font-mono font-bold text-primary">{inv.code}</p>
+                <p className="text-[11px] text-muted-foreground">
+                  {inv.claimed_at
+                    ? `Claimed by ${inv.friend_name || "Friend"} (${inv.friend_status || "joined"})`
+                    : inv.revoked
+                    ? "Cancelled"
+                    : "Available to share"}
+                </p>
+              </div>
+              <div>
+                {!inv.claimed_at && !inv.revoked && (
+                  <button
+                    onClick={() => handleCopy(inv.code)}
+                    className="rounded-lg border border-border px-2.5 py-1 text-[11px] font-semibold text-foreground hover:bg-muted"
+                  >
+                    Copy
+                  </button>
+                )}
+              </div>
+            </div>
+          ))}
+          {invites.length === 0 && (
+            <p className="p-4 text-center text-xs text-muted-foreground">No invite passes generated yet.</p>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ==========================================
+// CATEGORY 8: ACCOUNT
+// ==========================================
+function AccountCategory({ p }: { p: ProfileRow }) {
+  const nav = useNavigate();
+
+  const handleSignOut = async () => {
+    if (!confirm("Are you sure you want to sign out?")) return;
+    await supabase.auth.signOut();
+    nav({ to: "/" });
+  };
+
+  const handleDeleteProfile = async () => {
+    if (!confirm("Delete your profile, photo and chats permanently? This cannot be undone.")) return;
+    try {
+      if (p.photo_path) {
+        await supabase.storage.from("photos").remove([p.photo_path]);
+      }
+      await supabase.from("profiles").delete().eq("id", p.id);
+      await supabase.auth.signOut();
+      nav({ to: "/" });
+    } catch (err: any) {
+      toast.error(err.message || "Failed to delete profile");
+    }
+  };
+
+  return (
+    <div className="space-y-5">
+      <div className="rounded-2xl border border-border bg-card p-4 space-y-2">
+        <h3 className="font-display text-sm font-bold text-primary">Signed-in Identity</h3>
+        <p className="text-xs text-muted-foreground font-mono truncate select-all">User ID: {p.id}</p>
+        <p className="text-xs text-muted-foreground">Verification: <b className="text-foreground">{p.verification_status}</b></p>
+      </div>
+
+      <div className="rounded-2xl border border-border bg-card p-4 space-y-3">
+        <h3 className="font-display text-sm font-bold text-primary">Session Management</h3>
+        <p className="text-xs text-muted-foreground">
+          Sign out of your active browser session on this device.
+        </p>
+        <button
+          type="button"
+          onClick={handleSignOut}
+          className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-muted/60 px-4 py-2.5 text-xs font-bold text-foreground hover:bg-muted transition"
+        >
+          <LogOut className="h-3.5 w-3.5" />
+          Sign Out of After9
+        </button>
+      </div>
+
+      {/* Danger Zone */}
+      <div className="rounded-2xl border border-destructive/40 bg-destructive/5 p-4 space-y-3">
+        <div className="flex items-center gap-2 text-destructive font-bold text-xs uppercase tracking-wider">
+          <AlertTriangle className="h-4 w-4" />
+          <span>Danger Zone</span>
+        </div>
+        <p className="text-xs text-muted-foreground leading-relaxed">
+          Permanently delete your profile, photos, matches, Dandiyas, and conversation records. This action cannot be reversed.
+        </p>
+        <button
+          type="button"
+          onClick={handleDeleteProfile}
+          className="inline-flex items-center gap-1.5 rounded-xl bg-destructive px-4 py-2.5 text-xs font-bold text-white hover:opacity-90 transition"
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+          Delete My Profile Permanently
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ==========================================
+// HELPER: BLOCKED LIST
+// ==========================================
+function BlockedList({ userId }: { userId: string }) {
+  const [list, setList] = useState<{ blocked_id: string }[] | null>(null);
+
+  const load = () =>
+    supabase
+      .from("blocks")
+      .select("blocked_id")
+      .eq("blocker_id", userId)
+      .then(({ data }) => setList(data ?? []));
+
+  useEffect(() => {
+    load();
+  }, [userId]);
+
+  return (
+    <div className="rounded-2xl border border-border bg-card p-4 space-y-2">
+      <div className="flex items-center justify-between">
+        <h3 className="font-display text-sm font-bold text-primary">Blocked Accounts</h3>
+        <span className="text-xs text-muted-foreground">{list ? `${list.length} blocked` : "Loading…"}</span>
+      </div>
+      {list && list.length > 0 ? (
+        <div className="divide-y divide-border/60">
+          {list.map((b, i) => (
+            <div key={b.blocked_id} className="flex items-center justify-between py-2 text-xs">
+              <span className="text-muted-foreground">Blocked User {i + 1}</span>
+              <button
+                className="font-bold text-primary hover:underline"
+                onClick={async () => {
+                  await supabase
+                    .from("blocks")
+                    .delete()
+                    .eq("blocker_id", userId)
+                    .eq("blocked_id", b.blocked_id);
+                  load();
+                  toast.success("User unblocked");
+                }}
+              >
+                Unblock
+              </button>
             </div>
           ))}
         </div>
+      ) : (
+        <p className="text-xs text-muted-foreground pt-1">Nobody blocked.</p>
       )}
-
-      {/* Individual Passes List */}
-      <div className="space-y-2 pt-2">
-        <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-          Individual Passes
-        </p>
-        {list.map((i) => (
-          <div
-            key={i.code}
-            className="flex flex-col gap-1 rounded-xl border border-border bg-card/60 p-3"
-          >
-            <div className="flex items-center justify-between">
-              <span
-                className={cn(
-                  "font-mono font-bold tracking-widest text-sm",
-                  status(i) && !i.claimed_at && "text-muted-foreground line-through",
-                )}
-              >
-                {i.code}
-              </span>
-              {status(i) ? (
-                <span className="rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground font-medium">
-                  {status(i)}
-                </span>
-              ) : (
-                <div className="flex items-center gap-2 text-xs">
-                  <button
-                    className="font-semibold text-primary transition hover:underline"
-                    onClick={() => copyLink(i.code)}
-                  >
-                    {copied === i.code ? "Copied" : "Copy"}
-                  </button>
-                  <button
-                    className="font-semibold text-emerald-600 transition hover:underline"
-                    onClick={() => shareWhatsApp(i.code)}
-                  >
-                    WhatsApp
-                  </button>
-                  <button
-                    className="font-semibold text-action transition hover:underline"
-                    onClick={() => shareCard(i.code)}
-                  >
-                    Card
-                  </button>
-                  <button
-                    className="text-muted-foreground transition hover:text-destructive"
-                    onClick={async () => {
-                      await revoke({ data: { code: i.code } });
-                      load();
-                    }}
-                  >
-                    Cancel
-                  </button>
-                </div>
-              )}
-            </div>
-            {i.claimed_at && (
-              <p className="text-xs text-muted-foreground">
-                <b className="text-foreground">{i.friend_name ?? "A friend"}</b>{" "}
-                <span className={stage(i)[1]}>· {stage(i)[0]}</span>
-              </p>
-            )}
-          </div>
-        ))}
-      </div>
-
-      {!me.invited_by && (
-        <form
-          className="flex gap-2 pt-5"
-          onSubmit={async (e) => {
-            e.preventDefault();
-            const r = await claim({ data: { code } });
-            setNote(r.reason);
-            if (r.ok) {
-              toast.success(r.reason ?? "Invite accepted!");
-              onClaimed();
-            } else {
-              toast.error(r.reason ?? "Invalid code");
-            }
-          }}
-        >
-          <input
-            value={code}
-            onChange={(e) => setCode(e.target.value.toUpperCase())}
-            placeholder="Got a code? A9-XXXXX"
-            className="h-11 flex-1 rounded-xl border border-border bg-card px-3 font-mono tracking-widest text-sm outline-none focus:border-action"
-          />
-          <button
-            className="h-11 rounded-xl bg-primary px-4 text-sm font-semibold text-primary-foreground transition hover:opacity-90"
-            disabled={!code.trim()}
-          >
-            Use
-          </button>
-        </form>
-      )}
-      {note && <p className="pt-2 text-sm text-muted-foreground">{note}</p>}
-    </Section>
-  );
-}
-
-type Stats = { seen: number; dandiyas: number; passes: number; matches: number; sent: number };
-type Liker = {
-  id: string;
-  first_name: string | null;
-  age: number | null;
-  college: string | null;
-  photo_path: string | null;
-};
-function ShareStats() {
-  const [s, setS] = useState<{
-    invite_opens: number;
-    invite_joins: number;
-    invite_finished: number;
-    story_opens: number;
-    story_joins: number;
-  } | null>(null);
-  useEffect(() => {
-    supabase.rpc("my_share_stats").then(({ data }) => setS(data?.[0] ?? null));
-  }, []);
-  if (!s) return null;
-  const box = (n: number, l: string) => (
-    <div className="bg-card px-3 py-3">
-      <p className="font-display text-2xl font-extrabold text-primary">{n}</p>
-      <p className="text-xs text-muted-foreground">{l}</p>
     </div>
-  );
-  return (
-    <Section title="YOUR SHARED CARDS">
-      <p className="mb-2 mt-2 text-sm font-medium">Invite cards</p>
-      <div className="grid grid-cols-3 gap-2">
-        {box(s.invite_opens, "Opened")}
-        {box(s.invite_joins, "Signed up")}
-        {box(s.invite_finished, "Finished setup")}
-      </div>
-      <p className="mb-2 mt-4 text-sm font-medium">Story card</p>
-      <div className="grid grid-cols-2 gap-2">
-        {box(s.story_opens, "Opened")}
-        {box(s.story_joins, "Joined After9")}
-      </div>
-      <p className="mt-2 text-xs text-muted-foreground">
-        Names of friends who joined are on your Invite list.
-      </p>
-    </Section>
-  );
-}
-
-function CardStats() {
-  const [s, setS] = useState<Stats | null>(null);
-  const [mutual, setMutual] = useState<
-    { id: string; first_name: string | null; photo_path: string | null }[]
-  >([]);
-  const [likers, setLikers] = useState<Liker[]>([]);
-  useEffect(() => {
-    supabase.rpc("my_card_stats").then(({ data }) => setS((data?.[0] as Stats) ?? null));
-    supabase.rpc("my_matches").then(({ data }) => setMutual(data ?? []));
-    supabase.rpc("my_likers").then(({ data }) => setLikers((data ?? []) as Liker[]));
-  }, []);
-  const urls = usePhotoUrls([
-    ...mutual.map((m) => m.photo_path),
-    ...likers.map((l) => l.photo_path),
-  ]);
-  if (!s) return null;
-  const rate = s.seen ? Math.round((s.dandiyas / s.seen) * 100) : 0;
-  return (
-    <Section title="YOUR CARD">
-      <div className="grid grid-cols-3 gap-2 py-2 text-center">
-        {(
-          [
-            ["Swiped on", s.seen],
-            ["Dandiyas", s.dandiyas],
-            ["Clashes", s.matches],
-          ] as const
-        ).map(([l, n]) => (
-          <div key={l} className="bg-card py-3">
-            <p className="font-display text-2xl font-extrabold text-primary">{n}</p>
-            <p className="text-xs text-muted-foreground">{l}</p>
-          </div>
-        ))}
-      </div>
-      <p className="text-sm text-muted-foreground">
-        {s.seen
-          ? `${rate}% of people who saw your card sent a Dandiya. `
-          : "Nobody has swiped on your card yet. "}
-        You've sent {s.sent}.
-      </p>
-      {likers.length > 0 && (
-        <div className="mt-3">
-          <p className="mb-2 text-sm font-semibold">People who like you</p>
-          <div className="no-scrollbar flex gap-3 overflow-x-auto pb-1">
-            {likers.map((l) => (
-              <Link key={l.id} to="/discover" className="w-20 shrink-0">
-                <div className="relative aspect-[3/4] overflow-hidden bg-muted">
-                  {l.photo_path && urls[l.photo_path] && (
-                    <img
-                      src={urls[l.photo_path]}
-                      alt={l.first_name ?? ""}
-                      className="h-full w-full object-cover"
-                    />
-                  )}
-                  <span className="absolute right-1 top-1 rounded-full bg-action p-1 text-action-foreground">
-                    <Dandiya className="h-3.5 w-3.5" />
-                  </span>
-                </div>
-                <p className="mt-1 truncate text-xs font-medium">
-                  {l.first_name}
-                  {l.age ? `, ${l.age}` : ""}
-                </p>
-              </Link>
-            ))}
-          </div>
-          <p className="text-xs text-muted-foreground">
-            They sent you a Dandiya. Send one back from Discover and it's a clash.
-          </p>
-        </div>
-      )}
-      {mutual.length > 0 && (
-        <div className="mt-3">
-          <p className="mb-2 text-sm font-semibold">Sent you a Dandiya — and you sent one back</p>
-          <div className="no-scrollbar flex gap-3 overflow-x-auto pb-1">
-            {mutual.map((m) => (
-              <Link
-                key={m.id}
-                to="/chat/$id"
-                params={{ id: m.id }}
-                className="relative w-20 shrink-0"
-              >
-                <div className="aspect-[3/4] overflow-hidden bg-muted">
-                  {m.photo_path && urls[m.photo_path] && (
-                    <img
-                      src={urls[m.photo_path]}
-                      alt={m.first_name ?? ""}
-                      className="h-full w-full object-cover"
-                    />
-                  )}
-                </div>
-                <span className="absolute right-1 top-1 rounded-full bg-action p-1 text-action-foreground">
-                  <ChatIcon className="h-3.5 w-3.5" />
-                </span>
-                <p className="mt-1 truncate text-xs font-medium">{m.first_name}</p>
-              </Link>
-            ))}
-          </div>
-        </div>
-      )}
-    </Section>
   );
 }

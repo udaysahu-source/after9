@@ -21,6 +21,10 @@ export type Database = {
           created_at: string
           reason: string | null
           report: boolean
+          status?: string
+          moderator_notes?: string | null
+          resolved_at?: string | null
+          resolved_by?: string | null
         }
         Insert: {
           blocked_id: string
@@ -28,6 +32,10 @@ export type Database = {
           created_at?: string
           reason?: string | null
           report?: boolean
+          status?: string
+          moderator_notes?: string | null
+          resolved_at?: string | null
+          resolved_by?: string | null
         }
         Update: {
           blocked_id?: string
@@ -35,6 +43,10 @@ export type Database = {
           created_at?: string
           reason?: string | null
           report?: boolean
+          status?: string
+          moderator_notes?: string | null
+          resolved_at?: string | null
+          resolved_by?: string | null
         }
         Relationships: [
           {
@@ -52,6 +64,117 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      admin_users: {
+        Row: {
+          id: string
+          user_id: string | null
+          email: string
+          role: string
+          is_active: boolean
+          created_at: string
+          created_by: string | null
+        }
+        Insert: {
+          id?: string
+          user_id?: string | null
+          email: string
+          role?: string
+          is_active?: boolean
+          created_at?: string
+          created_by?: string | null
+        }
+        Update: {
+          id?: string
+          user_id?: string | null
+          email?: string
+          role?: string
+          is_active?: boolean
+          created_at?: string
+          created_by?: string | null
+        }
+        Relationships: []
+      }
+      admin_audit_logs: {
+        Row: {
+          id: string
+          actor_id: string | null
+          actor_email: string
+          action: string
+          target_id: string | null
+          details: Json | null
+          ip_address: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          actor_id?: string | null
+          actor_email: string
+          action: string
+          target_id?: string | null
+          details?: Json | null
+          ip_address?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          actor_id?: string | null
+          actor_email?: string
+          action?: string
+          target_id?: string | null
+          details?: Json | null
+          ip_address?: string | null
+          created_at?: string
+        }
+        Relationships: []
+      }
+      events: {
+        Row: {
+          id: string
+          title: string
+          venue: string
+          city: string
+          dates: Json
+          organizer: string | null
+          booking_url: string | null
+          ticket_price_range: string | null
+          price_source: string | null
+          verification_status: string
+          is_active: boolean
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          title: string
+          venue: string
+          city?: string
+          dates?: Json
+          organizer?: string | null
+          booking_url?: string | null
+          ticket_price_range?: string | null
+          price_source?: string | null
+          verification_status?: string
+          is_active?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          title?: string
+          venue?: string
+          city?: string
+          dates?: Json
+          organizer?: string | null
+          booking_url?: string | null
+          ticket_price_range?: string | null
+          price_source?: string | null
+          verification_status?: string
+          is_active?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
       }
       card_opens: {
         Row: {
@@ -305,6 +428,8 @@ export type Database = {
           updated_at: string
           verification_reason: string | null
           verification_status: string
+          is_suspended?: boolean
+          suspension_reason?: string | null
         }
         Insert: {
           birth_date?: string | null
@@ -336,6 +461,8 @@ export type Database = {
           verification_reason?: string | null
           verification_status?: string
           visibility_audiences?: string[]
+          is_suspended?: boolean
+          suspension_reason?: string | null
         }
         Update: {
           birth_date?: string | null
@@ -367,6 +494,8 @@ export type Database = {
           verification_reason?: string | null
           verification_status?: string
           visibility_audiences?: string[]
+          is_suspended?: boolean
+          suspension_reason?: string | null
         }
         Relationships: [
           {
@@ -512,6 +641,14 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      ensure_my_invites: {
+        Args: Record<PropertyKey, never>
+        Returns: Json
+      }
+      is_admin: {
+        Args: { p_user_id: string }
+        Returns: boolean
+      }
       mark_all_notifications_read: {
         Args: Record<PropertyKey, never>
         Returns: undefined

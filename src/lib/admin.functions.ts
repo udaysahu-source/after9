@@ -49,8 +49,9 @@ export const checkAdminStatus = createServerFn({ method: "GET" })
       };
     }
 
-    // Check environment variable ADMIN_EMAILS (comma separated)
-    const configuredAdminEmails = (process.env["ADMIN_EMAILS"] || "")
+    // Check environment variables ADMIN_EMAILS / ADMIN_EMAIL (comma separated)
+    const rawEnv = [process.env["ADMIN_EMAILS"], process.env["ADMIN_EMAIL"]].filter(Boolean).join(",");
+    const configuredAdminEmails = rawEnv
       .split(",")
       .map((e) => e.trim().toLowerCase())
       .filter(Boolean);
@@ -105,7 +106,8 @@ async function assertAdminCaller(userId: string) {
     return { email, role: adminRecord.role };
   }
 
-  const configuredAdminEmails = (process.env["ADMIN_EMAILS"] || "")
+  const rawEnv = [process.env["ADMIN_EMAILS"], process.env["ADMIN_EMAIL"]].filter(Boolean).join(",");
+  const configuredAdminEmails = rawEnv
     .split(",")
     .map((e) => e.trim().toLowerCase())
     .filter(Boolean);

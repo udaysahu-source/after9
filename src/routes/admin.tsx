@@ -20,10 +20,15 @@ import {
   Trash2,
   Lock,
   Plus,
+  Sparkles,
+  Rocket,
+  Globe,
 } from "lucide-react";
 import {
   checkAdminStatus,
   getAdminOverviewMetrics,
+  getAdminLaunchControl,
+  toggleAdminDiscoverLaunch,
   listAdminUsers,
   updateUserModeration,
   listAdminReports,
@@ -48,11 +53,13 @@ export const Route = createFileRoute("/admin")({
   component: AdminDashboard,
 });
 
-type AdminTab = "overview" | "users" | "moderation" | "invites" | "events" | "health";
+type AdminTab = "overview" | "launch" | "users" | "moderation" | "invites" | "events" | "health";
 
 function AdminDashboard() {
   const checkStatus = useServerFn(checkAdminStatus);
   const getMetrics = useServerFn(getAdminOverviewMetrics);
+  const getLaunchCtrl = useServerFn(getAdminLaunchControl);
+  const toggleLaunch = useServerFn(toggleAdminDiscoverLaunch);
   const listUsers = useServerFn(listAdminUsers);
   const updateModeration = useServerFn(updateUserModeration);
   const getReports = useServerFn(listAdminReports);
@@ -71,6 +78,13 @@ function AdminDashboard() {
   // State for metrics
   const [metrics, setMetrics] = useState<any>(null);
   const [metricsLoading, setMetricsLoading] = useState(false);
+  const [growthWindow, setGrowthWindow] = useState<"24h" | "7d" | "30d" | "all">("24h");
+
+  // State for Launch Control
+  const [launchControl, setLaunchControl] = useState<any>(null);
+  const [launchLoading, setLaunchLoading] = useState(false);
+  const [targetInput, setTargetInput] = useState("50");
+  const [launchModalOpen, setLaunchModalOpen] = useState(false);
 
   // State for user management
   const [userList, setUserList] = useState<any[]>([]);
@@ -132,10 +146,35 @@ function AdminDashboard() {
       try {
         const m = await getMetrics();
         setMetrics(m);
+        if (m.launch) {
+          setLaunchControl({
+            discover_enabled: m.launch.discoverEnabled,
+            readiness_target: m.launch.readinessTarget,
+            city_counts: m.launch.cityCounts,
+            night_counts: m.launch.nightCounts,
+            last_changed_at: m.launch.lastChangedAt,
+            last_changed_by_email: m.launch.lastChangedByEmail,
+            total_registered_users: m.totalUsers,
+            completed_profiles_count: m.onboardedUsers,
+            eligible_users_count: m.discoverableUsers,
+          });
+          setTargetInput(String(m.launch.readinessTarget ?? 50));
+        }
       } catch (err: any) {
         toast.error(err.message || "Could not load metrics");
       } finally {
         setMetricsLoading(false);
+      }
+    } else if (activeTab === "launch") {
+      setLaunchLoading(true);
+      try {
+        const lc = await getLaunchCtrl();
+        setLaunchControl(lc);
+        setTargetInput(String(lc.readiness_target ?? 50));
+      } catch (err: any) {
+        toast.error(err.message || "Could not load launch control");
+      } finally {
+        setLaunchLoading(false);
       }
     } else if (activeTab === "users") {
       setUsersLoading(true);
@@ -195,6 +234,7 @@ function AdminDashboard() {
     userSearch,
     userFilter,
     getMetrics,
+    getLaunchCtrl,
     listUsers,
     getReports,
     getInvites,
@@ -206,6 +246,49 @@ function AdminDashboard() {
   useEffect(() => {
     loadTabData();
   }, [loadTabData]);
+
+  // Handle Launch Control Toggle
+  const handleToggleLaunch = async (enable: boolean) => {
+    setLaunchLoading(true);
+    try {
+      const target = parseInt(targetInput, 10) || 50;
+      const updated = await toggleLaunch({
+        data: {
+          enabled: enable,
+          target,
+        },
+      });
+      setLaunchControl(updated);
+      setLaunchModalOpen(false);
+      toast.success(enable ? "Discover launched globally! Feeds are live." : "Discover paused — waiting room active.");
+      loadTabData();
+    } catch (err: any) {
+      toast.error(err.message || "Failed to update launch status");
+    } finally {
+      setLaunchLoading(false);
+    }
+  };
+
+  // Handle Save Readiness Target
+  const handleSaveTarget = async () => {
+    setLaunchLoading(true);
+    try {
+      const target = parseInt(targetInput, 10) || 50;
+      const updated = await toggleLaunch({
+        data: {
+          enabled: launchControl?.discover_enabled ?? false,
+          target,
+        },
+      });
+      setLaunchControl(updated);
+      toast.success(`Readiness target updated to ${target}`);
+      loadTabData();
+    } catch (err: any) {
+      toast.error(err.message || "Failed to update target");
+    } finally {
+      setLaunchLoading(false);
+    }
+  };
 
   // Auth loading state
   if (loadingAuth) {
@@ -355,6 +438,7 @@ function AdminDashboard() {
         <div className="mx-auto max-w-7xl mt-3 flex items-center gap-1 overflow-x-auto pb-1 scrollbar-none">
           {[
             { id: "overview", label: "Overview", icon: Activity },
+            { id: "launch", label: "Launch Control", icon: Sparkles },
             { id: "users", label: "Users", icon: Users },
             { id: "moderation", label: "Moderation & Safety", icon: ShieldAlert },
             { id: "invites", label: "Referrals & Invites", icon: Ticket },
@@ -395,34 +479,420 @@ function AdminDashboard() {
                 {metricsLoading && <RefreshCw className="h-4 w-4 animate-spin text-action" />}
               </div>
 
-              {metrics && (
-                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-                  <MetricCard title="Total Registered" value={metrics.totalUsers} subtitle="All created accounts" />
-                  <MetricCard
-                    title="Profile Completed"
-                    value={metrics.onboardedUsers}
-                    subtitle={`${metrics.totalUsers ? Math.round((metrics.onboardedUsers / metrics.totalUsers) * 100) : 0}% completion`}
-                  />
-                  <MetricCard title="Live on Discover" value={metrics.discoverableUsers} subtitle="Active & discoverable" />
-                  <MetricCard title="Mutual Matches" value={metrics.mutualMatches} subtitle="Two-way Dandiya clashes" />
-                  <MetricCard title="Total Swipes" value={metrics.totalSwipes} subtitle="Send & pass reactions" />
-                  <MetricCard title="Messages Exchanged" value={metrics.totalMessages} subtitle="Across matched chats" />
-                  <MetricCard
-                    title="Referral Invites"
-                    value={`${metrics.claimedInvites} / ${metrics.totalInvites}`}
-                    subtitle={`${metrics.conversionRate}% claimed conversion`}
-                  />
-                  <MetricCard
-                    title="Pending Reports"
-                    value={metrics.openReports}
-                    subtitle="Requires moderator review"
-                    highlight={metrics.openReports > 0}
-                  />
-                  <MetricCard title="New Users (24h)" value={metrics.newUsers24h} subtitle="Past 24 hours" />
-                  <MetricCard title="New Users (7d)" value={metrics.newUsers7d} subtitle="Past 7 days" />
-                  <MetricCard title="Active (24h)" value={metrics.activeUsers24h} subtitle="Profiles updated past 24h" />
-                  <MetricCard title="Active (7d)" value={metrics.activeUsers7d} subtitle="Profiles updated past 7d" />
+              {/* Discover Launch Status Banner */}
+              {launchControl && (
+                <div
+                  className={`rounded-2xl border p-4.5 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4 transition ${
+                    launchControl.discover_enabled
+                      ? "border-teal-500/40 bg-teal-500/10 text-teal-950 dark:text-teal-100"
+                      : "border-amber-500/40 bg-amber-500/10 text-amber-950 dark:text-amber-100"
+                  }`}
+                >
+                  <div className="flex items-start gap-3.5">
+                    <div
+                      className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${
+                        launchControl.discover_enabled ? "bg-teal-500 text-white" : "bg-amber-500 text-white"
+                      }`}
+                    >
+                      {launchControl.discover_enabled ? <Rocket className="h-5 w-5" /> : <Lock className="h-5 w-5" />}
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span
+                          className={`rounded-full px-2 py-0.5 text-[10px] font-black uppercase tracking-wider ${
+                            launchControl.discover_enabled
+                              ? "bg-teal-500/20 text-teal-700 dark:text-teal-300"
+                              : "bg-amber-500/20 text-amber-700 dark:text-amber-300"
+                          }`}
+                        >
+                          {launchControl.discover_enabled ? "Discover is Live" : "Discover is Paused (Waiting Room Active)"}
+                        </span>
+                        <span className="text-[11px] text-muted-foreground">
+                          Target: {launchControl.completed_profiles_count ?? metrics?.onboardedUsers ?? 0} /{" "}
+                          {launchControl.readiness_target} profiles completed
+                        </span>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {launchControl.discover_enabled
+                          ? "All eligible profiles are actively visible and matchable in the Dandiya deck."
+                          : "Ordinary users see the early-community waiting room with Garba crew invite tools."}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 self-end md:self-auto shrink-0">
+                    <button
+                      onClick={() => setActiveTab("launch")}
+                      className="rounded-xl border border-border bg-card px-3 py-1.5 text-xs font-bold text-foreground hover:bg-muted shadow-xs transition"
+                    >
+                      Manage Launch →
+                    </button>
+                    <button
+                      onClick={() => setLaunchModalOpen(true)}
+                      className={`rounded-xl px-3.5 py-1.5 text-xs font-bold text-white shadow-xs transition ${
+                        launchControl.discover_enabled ? "bg-amber-600 hover:bg-amber-700" : "bg-teal-600 hover:bg-teal-700"
+                      }`}
+                    >
+                      {launchControl.discover_enabled ? "Pause Discover" : "Launch Discover"}
+                    </button>
+                  </div>
                 </div>
+              )}
+
+              {/* Time Window Selector for Registration Growth */}
+              <div className="flex items-center justify-between border-b border-border/60 pb-3">
+                <div className="flex items-center gap-1.5 text-xs font-bold text-muted-foreground">
+                  <Activity className="h-3.5 w-3.5" />
+                  <span>Registration Growth Window:</span>
+                </div>
+                <div className="flex items-center rounded-xl border border-border bg-card p-0.5">
+                  {(["24h", "7d", "30d", "all"] as const).map((win) => (
+                    <button
+                      key={win}
+                      onClick={() => setGrowthWindow(win)}
+                      className={`rounded-lg px-2.5 py-1 text-xs font-bold uppercase transition ${
+                        growthWindow === win
+                          ? "bg-primary text-primary-foreground shadow-xs"
+                          : "text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      {win === "all" ? "All Time" : win}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {metrics && (
+                <>
+                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+                    <MetricCard title="Total Registered" value={metrics.totalUsers} subtitle="All created accounts" />
+                    <MetricCard
+                      title={`New Users (${growthWindow.toUpperCase()})`}
+                      value={
+                        growthWindow === "24h"
+                          ? metrics.newUsers24h
+                          : growthWindow === "7d"
+                          ? metrics.newUsers7d
+                          : growthWindow === "30d"
+                          ? (metrics.newUsers30d ?? metrics.newUsers7d)
+                          : metrics.totalUsers
+                      }
+                      subtitle={`Registrations in past ${growthWindow}`}
+                      highlight={true}
+                    />
+                    <MetricCard
+                      title="Profile Completed"
+                      value={metrics.onboardedUsers}
+                      subtitle={`${
+                        metrics.totalUsers ? Math.round((metrics.onboardedUsers / metrics.totalUsers) * 100) : 0
+                      }% completion rate`}
+                    />
+                    <MetricCard
+                      title="Live Discover Inventory"
+                      value={metrics.discoverableUsers}
+                      subtitle="Eligible & discoverable now"
+                    />
+                    <MetricCard title="Mutual Matches" value={metrics.mutualMatches} subtitle="Two-way Dandiya clashes" />
+                    <MetricCard title="Total Swipes" value={metrics.totalSwipes} subtitle="Send & pass reactions" />
+                    <MetricCard title="Messages Exchanged" value={metrics.totalMessages} subtitle="Across matched chats" />
+                    <MetricCard
+                      title="Pending Reports"
+                      value={metrics.openReports}
+                      subtitle="Requires moderator review"
+                      highlight={metrics.openReports > 0}
+                    />
+                    <MetricCard title="Active Users (24h)" value={metrics.activeUsers24h} subtitle="Updated profile past 24h" />
+                    <MetricCard title="Active Users (7d)" value={metrics.activeUsers7d} subtitle="Updated profile past 7d" />
+                    <MetricCard
+                      title="Referral Tokens"
+                      value={metrics.totalInvites}
+                      subtitle={`${metrics.conversionRate}% claimed rate`}
+                    />
+                    <MetricCard
+                      title="Referred Users"
+                      value={metrics.referredUsersTotal ?? metrics.claimedInvites}
+                      subtitle={`${metrics.referredOnboardedRate ?? 100}% finished onboarding`}
+                    />
+                  </div>
+
+                  {/* Referral Funnel & Event Summary Grid */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* Referral Performance Funnel */}
+                    <div className="rounded-2xl border border-border/80 bg-card p-4.5 shadow-xs space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <Ticket className="h-4 w-4 text-action" />
+                          <h3 className="font-display text-sm font-extrabold text-primary">Referral Funnel Conversion</h3>
+                        </div>
+                        <span className="text-xs font-bold text-action font-mono">{metrics.conversionRate}% claimed</span>
+                      </div>
+                      <div className="grid grid-cols-3 gap-2 text-center">
+                        <div className="rounded-xl border border-border/60 bg-muted/30 p-2.5">
+                          <p className="text-[10px] uppercase font-bold text-muted-foreground">Tokens Created</p>
+                          <p className="text-lg font-black text-primary font-display mt-0.5">{metrics.totalInvites}</p>
+                        </div>
+                        <div className="rounded-xl border border-border/60 bg-muted/30 p-2.5">
+                          <p className="text-[10px] uppercase font-bold text-muted-foreground">Referred Users</p>
+                          <p className="text-lg font-black text-primary font-display mt-0.5">
+                            {metrics.referredUsersTotal ?? metrics.claimedInvites}
+                          </p>
+                        </div>
+                        <div className="rounded-xl border border-border/60 bg-teal-500/10 p-2.5">
+                          <p className="text-[10px] uppercase font-bold text-teal-700 dark:text-teal-400">Onboarded</p>
+                          <p className="text-lg font-black text-teal-600 dark:text-teal-400 font-display mt-0.5">
+                            {metrics.referredUsersOnboarded ?? metrics.claimedInvites}
+                          </p>
+                        </div>
+                      </div>
+                      <p className="text-[11px] text-muted-foreground">
+                        {metrics.referredOnboardedRate ?? 100}% of referred accounts successfully completed onboarding and joined the community.
+                      </p>
+                    </div>
+
+                    {/* Events & Garba Venues Summary */}
+                    <div className="rounded-2xl border border-border/80 bg-card p-4.5 shadow-xs space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <Calendar className="h-4 w-4 text-primary" />
+                          <h3 className="font-display text-sm font-extrabold text-primary">Garba Event Listings</h3>
+                        </div>
+                        <button onClick={() => setActiveTab("events")} className="text-xs font-bold text-primary hover:underline">
+                          View all →
+                        </button>
+                      </div>
+                      <div className="grid grid-cols-3 gap-2 text-center">
+                        <div className="rounded-xl border border-teal-500/30 bg-teal-500/10 p-2.5">
+                          <p className="text-[10px] uppercase font-bold text-teal-700 dark:text-teal-400">Verified</p>
+                          <p className="text-lg font-black text-teal-600 font-display mt-0.5">{metrics.events?.verified ?? 0}</p>
+                        </div>
+                        <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-2.5">
+                          <p className="text-[10px] uppercase font-bold text-amber-700 dark:text-amber-400">Unverified</p>
+                          <p className="text-lg font-black text-amber-600 font-display mt-0.5">{metrics.events?.unverified ?? 0}</p>
+                        </div>
+                        <div className="rounded-xl border border-border/60 bg-muted/30 p-2.5">
+                          <p className="text-[10px] uppercase font-bold text-muted-foreground">Expired</p>
+                          <p className="text-lg font-black text-muted-foreground font-display mt-0.5">{metrics.events?.expired ?? 0}</p>
+                        </div>
+                      </div>
+                      <p className="text-[11px] text-muted-foreground">
+                        Total {metrics.events?.total ?? 0} venue listings curated for Garba nights in Raipur and central hubs.
+                      </p>
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+
+          {/* TAB: LAUNCH CONTROL */}
+          {activeTab === "launch" && (
+            <div className="space-y-6">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <div>
+                  <h2 className="font-display text-2xl font-extrabold text-primary">Discover Launch Control</h2>
+                  <p className="text-xs text-muted-foreground">
+                    Persistent database-level feature flag. Disabling routes users to the early-community waiting room.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  {launchLoading && <RefreshCw className="h-4 w-4 animate-spin text-action" />}
+                  <button
+                    onClick={() => setLaunchModalOpen(true)}
+                    className={`rounded-xl px-4 py-2 text-xs font-bold text-white shadow-xs transition flex items-center gap-2 ${
+                      launchControl?.discover_enabled ? "bg-amber-600 hover:bg-amber-700" : "bg-teal-600 hover:bg-teal-700"
+                    }`}
+                  >
+                    <Rocket className="h-3.5 w-3.5" />
+                    <span>{launchControl?.discover_enabled ? "Pause Discover" : "Launch Discover Globally"}</span>
+                  </button>
+                </div>
+              </div>
+
+              {launchControl && (
+                <>
+                  {/* Status Banner */}
+                  <div
+                    className={`rounded-2xl border p-5 shadow-xs transition ${
+                      launchControl.discover_enabled
+                        ? "border-teal-500/40 bg-teal-500/10 text-teal-950 dark:text-teal-100"
+                        : "border-amber-500/40 bg-amber-500/10 text-amber-950 dark:text-amber-100"
+                    }`}
+                  >
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                      <div className="flex items-start gap-3.5">
+                        <div
+                          className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl ${
+                            launchControl.discover_enabled ? "bg-teal-500 text-white" : "bg-amber-500 text-white"
+                          }`}
+                        >
+                          <Sparkles className="h-6 w-6" />
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span
+                              className={`rounded-full px-2.5 py-0.5 text-xs font-black uppercase tracking-wider ${
+                                launchControl.discover_enabled
+                                  ? "bg-teal-500/20 text-teal-800 dark:text-teal-300"
+                                  : "bg-amber-500/20 text-amber-800 dark:text-amber-300"
+                              }`}
+                            >
+                              {launchControl.discover_enabled ? "DISCOVER IS CURRENTLY LIVE" : "PRE-LAUNCH WAITING ROOM ACTIVE"}
+                            </span>
+                          </div>
+                          <p className="text-xs text-muted-foreground mt-1 max-w-2xl leading-relaxed">
+                            {launchControl.discover_enabled
+                              ? "The discovery deck is open for all eligible, verified users. Profile feeds, swipe interactions, and Dandiya clash matches are fully functioning in real-time."
+                              : "All non-admin users visiting /discover see the early-community waiting room with the 'Your Garba crew starts here' experience, invite tools, and night selectors. Backend database function discover_feed() returns 0 rows."}
+                          </p>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => handleToggleLaunch(!launchControl.discover_enabled)}
+                        disabled={launchLoading}
+                        className={`rounded-xl px-4 py-2.5 text-xs font-extrabold text-white shadow-xs transition shrink-0 ${
+                          launchControl.discover_enabled ? "bg-amber-600 hover:bg-amber-700" : "bg-teal-600 hover:bg-teal-700"
+                        }`}
+                      >
+                        {launchControl.discover_enabled ? "Switch to Pre-Launch" : "Switch to Live Discover"}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Readiness Target & Progress */}
+                  <div className="rounded-2xl border border-border/80 bg-card p-5 shadow-xs space-y-4">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div>
+                        <h3 className="font-display text-base font-extrabold text-primary">Launch Readiness Target</h3>
+                        <p className="text-xs text-muted-foreground">
+                          Target number of completed, verified profiles before recommending public launch.
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="number"
+                          min="1"
+                          max="10000"
+                          value={targetInput}
+                          onChange={(e) => setTargetInput(e.target.value)}
+                          className="w-24 rounded-xl border border-border bg-background px-3 py-1.5 text-xs font-mono font-bold text-center focus:outline-none focus:ring-1 focus:ring-action"
+                        />
+                        <button
+                          onClick={handleSaveTarget}
+                          disabled={launchLoading}
+                          className="rounded-xl border border-border bg-muted/60 px-3 py-1.5 text-xs font-bold text-foreground hover:bg-muted transition"
+                        >
+                          Save Target
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Progress Bar */}
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="font-bold text-foreground">
+                          {launchControl.completed_profiles_count ?? 0} of {launchControl.readiness_target ?? 50} Profiles Completed
+                        </span>
+                        <span className="font-mono font-bold text-action">
+                          {Math.min(
+                            100,
+                            Math.round(
+                              ((launchControl.completed_profiles_count ?? 0) /
+                                (launchControl.readiness_target || 50)) *
+                                100
+                            )
+                          )}
+                          % Ready
+                        </span>
+                      </div>
+                      <div className="h-3 w-full overflow-hidden rounded-full bg-muted">
+                        <div
+                          className="h-full bg-gradient-to-r from-action to-primary transition-all duration-500 rounded-full"
+                          style={{
+                            width: `${Math.min(
+                              100,
+                              Math.round(
+                                ((launchControl.completed_profiles_count ?? 0) /
+                                  (launchControl.readiness_target || 50)) *
+                                  100
+                              )
+                            )}%`,
+                          }}
+                        />
+                      </div>
+                      <p className="text-[11px] text-muted-foreground italic">
+                        * Note: Reaching 100% does NOT automatically enable Discover. The administrator retains final human authority to flip the switch.
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Inventory & Breakdown Cards */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* City Breakdown */}
+                    <div className="rounded-2xl border border-border/80 bg-card p-5 shadow-xs space-y-3">
+                      <div className="flex items-center gap-2">
+                        <Globe className="h-4 w-4 text-primary" />
+                        <h3 className="font-display text-sm font-extrabold text-primary">Eligible Profiles by City</h3>
+                      </div>
+                      <div className="divide-y divide-border/60">
+                        {launchControl.city_counts && Object.keys(launchControl.city_counts).length > 0 ? (
+                          Object.entries(launchControl.city_counts).map(([city, count]: [string, any]) => (
+                            <div key={city} className="flex items-center justify-between py-2 text-xs">
+                              <span className="font-semibold text-foreground">📍 {city}</span>
+                              <span className="font-mono font-bold rounded-full bg-primary/10 px-2 py-0.5 text-primary">
+                                {count} {count === 1 ? "user" : "users"}
+                              </span>
+                            </div>
+                          ))
+                        ) : (
+                          <p className="text-xs text-muted-foreground py-2 italic">No city location data recorded yet.</p>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Garba Nights Breakdown */}
+                    <div className="rounded-2xl border border-border/80 bg-card p-5 shadow-xs space-y-3">
+                      <div className="flex items-center gap-2">
+                        <Calendar className="h-4 w-4 text-action" />
+                        <h3 className="font-display text-sm font-extrabold text-primary">Attendance Interest by Garba Night</h3>
+                      </div>
+                      <div className="grid grid-cols-3 gap-2">
+                        {Array.from({ length: 9 }, (_, i) => i + 1).map((night) => {
+                          const count = launchControl.night_counts?.[`night_${night}`] ?? 0;
+                          return (
+                            <div
+                              key={night}
+                              className={`rounded-xl border p-2.5 text-center transition ${
+                                count > 0 ? "border-action/40 bg-action/10" : "border-border/60 bg-muted/20"
+                              }`}
+                            >
+                              <p className="text-[10px] font-bold text-muted-foreground uppercase">Night {night}</p>
+                              <p className="text-base font-black text-primary font-display mt-0.5">{count}</p>
+                              <p className="text-[9px] text-muted-foreground">interested</p>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Audit Metadata Footer */}
+                  <div className="rounded-xl border border-border/60 bg-muted/20 p-3 text-xs text-muted-foreground flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <div>
+                      <span>Last configuration change: </span>
+                      <b className="text-foreground">
+                        {launchControl.last_changed_at
+                          ? new Date(launchControl.last_changed_at).toLocaleString()
+                          : "Initial setup"}
+                      </b>
+                      {launchControl.last_changed_by_email && (
+                        <span>
+                          {" "}
+                          by <b className="text-primary">{launchControl.last_changed_by_email}</b>
+                        </span>
+                      )}
+                    </div>
+                    <span className="font-mono text-[11px] text-muted-foreground">Key: launch_control.global</span>
+                  </div>
+                </>
               )}
             </div>
           )}
@@ -667,22 +1137,56 @@ function AdminDashboard() {
           {/* TAB 4: INVITES & REFERRALS */}
           {activeTab === "invites" && (
             <div className="space-y-4">
-              <div className="flex items-center justify-between">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                 <div>
-                  <h2 className="font-display text-2xl font-extrabold text-primary">Invitations & Referrals</h2>
-                  <p className="text-xs text-muted-foreground">Monitor aggregate invite usage and revoke compromised codes.</p>
+                  <h2 className="font-display text-2xl font-extrabold text-primary">Invitations & Referral Attribution</h2>
+                  <p className="text-xs text-muted-foreground">
+                    Four-stage tracking: link creation → registration attribution → onboarding completion → live on Discover.
+                  </p>
                 </div>
                 {invitesLoading && <RefreshCw className="h-4 w-4 animate-spin text-action" />}
+              </div>
+
+              {/* Referral Funnel Aggregate Cards */}
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                <div className="rounded-2xl border border-border/80 bg-card p-3.5 space-y-1">
+                  <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">1. Tokens Created</p>
+                  <p className="text-xl font-black text-primary font-display">{invites.length}</p>
+                  <p className="text-[10px] text-muted-foreground">Unique invite tokens</p>
+                </div>
+                <div className="rounded-2xl border border-border/80 bg-card p-3.5 space-y-1">
+                  <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">2. Attributed Registrations</p>
+                  <p className="text-xl font-black text-primary font-display">
+                    {invites.filter((i) => i.claimed_at).length}
+                  </p>
+                  <p className="text-[10px] text-muted-foreground">
+                    {invites.length ? Math.round((invites.filter((i) => i.claimed_at).length / invites.length) * 100) : 0}% claim rate
+                  </p>
+                </div>
+                <div className="rounded-2xl border border-border/80 bg-card p-3.5 space-y-1">
+                  <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">3. Onboarded Members</p>
+                  <p className="text-xl font-black text-teal-600 font-display">
+                    {invites.filter((i) => i.claimed_by_user?.onboarded).length}
+                  </p>
+                  <p className="text-[10px] text-muted-foreground">Completed profile & photos</p>
+                </div>
+                <div className="rounded-2xl border border-border/80 bg-card p-3.5 space-y-1">
+                  <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">4. Live on Discover</p>
+                  <p className="text-xl font-black text-teal-600 font-display">
+                    {invites.filter((i) => i.claimed_by_user?.discoverable).length}
+                  </p>
+                  <p className="text-[10px] text-muted-foreground">Active in match inventory</p>
+                </div>
               </div>
 
               <div className="overflow-x-auto rounded-2xl border border-border/80 bg-card shadow-xs">
                 <table className="w-full text-left text-xs">
                   <thead className="border-b border-border bg-muted/40 font-bold uppercase tracking-wider text-muted-foreground">
                     <tr>
-                      <th className="px-4 py-3">Code</th>
-                      <th className="px-4 py-3">Creator</th>
-                      <th className="px-4 py-3">Claimed By</th>
-                      <th className="px-4 py-3">Status</th>
+                      <th className="px-4 py-3">Referral Token</th>
+                      <th className="px-4 py-3">Inviter</th>
+                      <th className="px-4 py-3">Attributed User</th>
+                      <th className="px-4 py-3">Funnel Stage</th>
                       <th className="px-4 py-3">Created</th>
                       <th className="px-4 py-3 text-right">Action</th>
                     </tr>
@@ -692,16 +1196,17 @@ function AdminDashboard() {
                       <tr key={inv.code} className="hover:bg-muted/30 transition">
                         <td className="px-4 py-3 font-mono font-bold text-primary">{inv.code}</td>
                         <td className="px-4 py-3">
-                          <p className="font-semibold">{inv.creator?.first_name || "Unknown"}</p>
+                          <p className="font-semibold text-foreground">{inv.creator?.first_name || "Unknown"}</p>
                           <p className="text-[10px] text-muted-foreground">{inv.creator?.college || ""}</p>
                         </td>
                         <td className="px-4 py-3">
                           {inv.claimed_by_user ? (
-                            <span className="font-semibold text-foreground">
-                              {inv.claimed_by_user.first_name} ({inv.claimed_by_user.college})
-                            </span>
+                            <div>
+                              <p className="font-semibold text-foreground">{inv.claimed_by_user.first_name}</p>
+                              <p className="text-[10px] text-muted-foreground">{inv.claimed_by_user.college || "No college"}</p>
+                            </div>
                           ) : (
-                            <span className="text-muted-foreground italic">Unclaimed</span>
+                            <span className="text-muted-foreground italic">Unclaimed (Available)</span>
                           )}
                         </td>
                         <td className="px-4 py-3">
@@ -709,13 +1214,21 @@ function AdminDashboard() {
                             <span className="rounded-full bg-destructive/15 px-2 py-0.5 text-[10px] font-bold text-destructive">
                               Revoked
                             </span>
-                          ) : inv.claimed_at ? (
+                          ) : inv.claimed_by_user?.discoverable ? (
+                            <span className="rounded-full bg-teal-500/15 px-2 py-0.5 text-[10px] font-bold text-teal-600 dark:text-teal-400">
+                              Stage 4: Live on Discover
+                            </span>
+                          ) : inv.claimed_by_user?.onboarded ? (
                             <span className="rounded-full bg-teal-500/15 px-2 py-0.5 text-[10px] font-bold text-teal-600">
-                              Claimed
+                              Stage 3: Onboarded
+                            </span>
+                          ) : inv.claimed_at ? (
+                            <span className="rounded-full bg-blue-500/15 px-2 py-0.5 text-[10px] font-bold text-blue-600">
+                              Stage 2: Registered
                             </span>
                           ) : (
                             <span className="rounded-full bg-action/15 px-2 py-0.5 text-[10px] font-bold text-action">
-                              Available
+                              Stage 1: Link Created
                             </span>
                           )}
                         </td>
@@ -723,7 +1236,7 @@ function AdminDashboard() {
                           {new Date(inv.created_at).toLocaleDateString()}
                         </td>
                         <td className="px-4 py-3 text-right">
-                          {!inv.revoked && !inv.claimed_at && (
+                          {!inv.revoked && (
                             <button
                               onClick={() => handleRevokeInvite(inv.code)}
                               className="rounded-lg border border-destructive/40 bg-destructive/10 px-2.5 py-1 text-[11px] font-bold text-destructive hover:bg-destructive/20"
@@ -734,6 +1247,13 @@ function AdminDashboard() {
                         </td>
                       </tr>
                     ))}
+                    {invites.length === 0 && (
+                      <tr>
+                        <td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">
+                          No referral tokens found.
+                        </td>
+                      </tr>
+                    )}
                   </tbody>
                 </table>
               </div>
@@ -1030,6 +1550,80 @@ function AdminDashboard() {
                 </button>
               </div>
             </form>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {/* Confirmation Modal for Discover Launch Control */}
+      {launchModalOpen && (
+        <Dialog open={true} onOpenChange={() => setLaunchModalOpen(false)}>
+          <DialogContent className="max-w-md border-border/80 bg-background/98 p-6 shadow-2xl rounded-2xl">
+            <DialogHeader className="space-y-2">
+              <div className="flex items-center gap-2">
+                <div
+                  className={`flex h-9 w-9 items-center justify-center rounded-xl ${
+                    launchControl?.discover_enabled ? "bg-amber-500/15 text-amber-600" : "bg-teal-500/15 text-teal-600"
+                  }`}
+                >
+                  <Rocket className="h-5 w-5" />
+                </div>
+                <DialogTitle className="font-display text-lg font-extrabold text-primary">
+                  {launchControl?.discover_enabled ? "Pause Discover Deck?" : "Launch Discover Deck Globally?"}
+                </DialogTitle>
+              </div>
+              <DialogDescription className="text-xs text-muted-foreground leading-relaxed">
+                {launchControl?.discover_enabled
+                  ? "Pausing Discover routes all ordinary users to the early-community waiting room ('Your Garba crew starts here'). Server-side discover_feed() will immediately return 0 rows to protect user inventory."
+                  : "Launching Discover makes all eligible, verified profiles visible and matchable. Users will be able to swipe, send Dandiyas, and match in real-time."}
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="rounded-xl border border-border/60 bg-muted/20 p-3.5 space-y-2 my-2 text-xs">
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground">Current State:</span>
+                <span className="font-bold text-foreground">
+                  {launchControl?.discover_enabled ? "🟢 Live" : "🟡 Waiting Room"}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground">Action to Execute:</span>
+                <span className="font-bold text-primary">
+                  {launchControl?.discover_enabled ? "Switch to Pre-Launch" : "Switch to Live"}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground">Completed Profiles Ready:</span>
+                <span className="font-bold text-foreground">
+                  {launchControl?.completed_profiles_count ?? 0} / {targetInput} target
+                </span>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setLaunchModalOpen(false)}
+                className="rounded-xl border border-border px-3.5 py-2 text-xs font-semibold text-muted-foreground hover:bg-muted"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={launchLoading}
+                onClick={() => handleToggleLaunch(!launchControl?.discover_enabled)}
+                className={`rounded-xl px-4 py-2 text-xs font-extrabold text-white shadow-xs transition ${
+                  launchControl?.discover_enabled
+                    ? "bg-amber-600 hover:bg-amber-700"
+                    : "bg-teal-600 hover:bg-teal-700"
+                }`}
+              >
+                {launchLoading
+                  ? "Updating…"
+                  : launchControl?.discover_enabled
+                  ? "Yes, Pause Discover"
+                  : "Yes, Launch Discover Now"}
+              </button>
+            </div>
           </DialogContent>
         </Dialog>
       )}

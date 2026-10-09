@@ -28,6 +28,7 @@ import {
 import { Analytics } from "@/lib/launch-analytics";
 import { toast } from "sonner";
 import { NotificationBell } from "@/components/notifications-popover";
+import { EarlyCommunityView } from "@/components/early-community-view";
 
 export const Route = createFileRoute("/_authenticated/discover")({
   head: () => ({
@@ -59,6 +60,7 @@ function Discover() {
   const [inviteModalOpen, setInviteModalOpen] = useState(false);
   const [shareStudioOpen, setShareStudioOpen] = useState(false);
   const [socials, setSocials] = useState<SocialLinkRow[]>([]);
+  const [launchControl, setLaunchControl] = useState<any>(null);
 
   useEffect(() => {
     if (me) setHidden(!me.discoverable);
@@ -81,9 +83,10 @@ function Discover() {
     setFeedLoading(true);
     setFeedError(false);
     try {
-      const [feedRes, diagRes] = await Promise.all([
+      const [feedRes, diagRes, launchRes] = await Promise.all([
         supabase.rpc("discover_feed"),
         supabase.rpc("discover_diagnostics"),
+        supabase.rpc("get_launch_control"),
       ]);
 
       if (feedRes.error) throw feedRes.error;
@@ -91,6 +94,10 @@ function Discover() {
 
       if (diagRes.data && typeof diagRes.data === "object" && !("error" in diagRes.data)) {
         setDiagnostics(diagRes.data as unknown as DiscoveryDiagnostics);
+      }
+
+      if (launchRes.data && typeof launchRes.data === "object") {
+        setLaunchControl(launchRes.data);
       }
     } catch (err) {
       console.error("[Discover] data fetch error:", err);
@@ -108,6 +115,9 @@ function Discover() {
     const channel = supabase
       .channel(channelTopic)
       .on("postgres_changes", { event: "*", schema: "public", table: "profiles" }, () => {
+        loadDiscoveryData();
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "launch_control" }, () => {
         loadDiscoveryData();
       })
       .subscribe();
@@ -275,7 +285,20 @@ function Discover() {
         </div>
       </header>
 
-      <div className="mx-auto w-full max-w-md md:max-w-4xl lg:max-w-5xl px-5">
+      {launchControl && !launchControl.discover_enabled ? (
+        <EarlyCommunityView
+          userProfile={me}
+          readinessTarget={launchControl.readiness_target ?? 50}
+          completedProfilesCount={launchControl.completed_profiles_count ?? 0}
+          totalRegisteredUsers={launchControl.total_registered_users ?? 0}
+          nightCounts={launchControl.night_counts ?? {}}
+          cityCounts={launchControl.city_counts ?? {}}
+          onOpenInviteModal={() => setInviteModalOpen(true)}
+          onProfileUpdated={loadDiscoveryData}
+        />
+      ) : (
+        <>
+          <div className="mx-auto w-full max-w-md md:max-w-4xl lg:max-w-5xl px-5">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
           {/* Invite Friends Banner */}
           <div className="flex items-center justify-between rounded-xl border border-action/40 bg-gradient-to-r from-action/10 via-card to-card p-3 shadow-xs min-h-[56px]">
@@ -493,6 +516,8 @@ function Discover() {
           />
         )}
       </main>
+      </>
+      )}
 
       <BottomNav />
 

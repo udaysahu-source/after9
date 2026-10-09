@@ -131,6 +131,7 @@ export const getAdminOverviewMetrics = createServerFn({ method: "GET" })
     const now = new Date();
     const past24h = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString();
     const past7d = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
+    const past30d = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
 
     const [
       { count: totalUsers },
@@ -143,8 +144,15 @@ export const getAdminOverviewMetrics = createServerFn({ method: "GET" })
       { count: claimedInvites },
       { count: newUsers24h },
       { count: newUsers7d },
+      { count: newUsers30d },
       { count: activeUsers24h },
       { count: activeUsers7d },
+      { count: referredUsersTotal },
+      { count: referredUsersOnboarded },
+      { count: verifiedEvents },
+      { count: unverifiedEvents },
+      { count: expiredEvents },
+      launchRes,
     ] = await Promise.all([
       supabaseAdmin.from("profiles").select("*", { count: "exact", head: true }),
       supabaseAdmin.from("profiles").select("*", { count: "exact", head: true }).eq("onboarded", true),
@@ -156,8 +164,15 @@ export const getAdminOverviewMetrics = createServerFn({ method: "GET" })
       supabaseAdmin.from("invites").select("*", { count: "exact", head: true }).not("claimed_by", "is", null),
       supabaseAdmin.from("profiles").select("*", { count: "exact", head: true }).gte("created_at", past24h),
       supabaseAdmin.from("profiles").select("*", { count: "exact", head: true }).gte("created_at", past7d),
+      supabaseAdmin.from("profiles").select("*", { count: "exact", head: true }).gte("created_at", past30d),
       supabaseAdmin.from("profiles").select("*", { count: "exact", head: true }).gte("updated_at", past24h),
       supabaseAdmin.from("profiles").select("*", { count: "exact", head: true }).gte("updated_at", past7d),
+      supabaseAdmin.from("profiles").select("*", { count: "exact", head: true }).not("invited_by", "is", null),
+      supabaseAdmin.from("profiles").select("*", { count: "exact", head: true }).not("invited_by", "is", null).eq("onboarded", true),
+      supabaseAdmin.from("events").select("*", { count: "exact", head: true }).eq("verification_status", "verified"),
+      supabaseAdmin.from("events").select("*", { count: "exact", head: true }).eq("verification_status", "unverified"),
+      supabaseAdmin.from("events").select("*", { count: "exact", head: true }).eq("verification_status", "expired"),
+      supabaseAdmin.rpc("get_launch_control"),
     ]);
 
     // Calculate mutual matches count
@@ -172,6 +187,8 @@ export const getAdminOverviewMetrics = createServerFn({ method: "GET" })
       }
     }
 
+    const launchData = (launchRes.data as any) ?? {};
+
     return {
       totalUsers: totalUsers ?? 0,
       onboardedUsers: onboardedUsers ?? 0,
@@ -183,10 +200,27 @@ export const getAdminOverviewMetrics = createServerFn({ method: "GET" })
       totalInvites: totalInvites ?? 0,
       claimedInvites: claimedInvites ?? 0,
       conversionRate: totalInvites ? Math.round(((claimedInvites ?? 0) / totalInvites) * 100) : 0,
+      referredUsersTotal: referredUsersTotal ?? 0,
+      referredUsersOnboarded: referredUsersOnboarded ?? 0,
+      referredOnboardedRate: referredUsersTotal ? Math.round(((referredUsersOnboarded ?? 0) / referredUsersTotal) * 100) : 0,
       newUsers24h: newUsers24h ?? 0,
       newUsers7d: newUsers7d ?? 0,
+      newUsers30d: newUsers30d ?? 0,
       activeUsers24h: activeUsers24h ?? 0,
       activeUsers7d: activeUsers7d ?? 0,
+      events: {
+        verified: verifiedEvents ?? 0,
+        unverified: unverifiedEvents ?? 0,
+        expired: expiredEvents ?? 0,
+      },
+      launch: {
+        discoverEnabled: Boolean(launchData.discover_enabled),
+        readinessTarget: Number(launchData.readiness_target ?? 50),
+        cityCounts: (launchData.city_counts as Record<string, number>) ?? {},
+        nightCounts: (launchData.night_counts as Record<string, number>) ?? {},
+        lastChangedAt: launchData.last_changed_at ?? null,
+        lastChangedByEmail: launchData.last_changed_by_email ?? null,
+      },
     };
   });
 
@@ -378,7 +412,7 @@ export const listAdminInvites = createServerFn({ method: "GET" })
     ];
 
     const { data: profiles } = userIds.length
-      ? await supabaseAdmin.from("profiles").select("id, first_name, college").in("id", userIds)
+      ? await supabaseAdmin.from("profiles").select("id, first_name, college, onboarded, discoverable, verification_status, created_at").in("id", userIds)
       : { data: [] };
 
     const profMap = new Map((profiles ?? []).map((p) => [p.id, p]));
@@ -582,4 +616,76 @@ export const getAdminAuditLogs = createServerFn({ method: "GET" })
 
     if (error) throw error;
     return logs ?? [];
+  });
+
+/**
+ * Fetch launch control configuration and readiness metrics for Discover.
+ */
+export const getAdminLaunchControl = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    await assertAdminCaller(context.userId);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+
+    const { data, error } = await supabaseAdmin.rpc("get_launch_control");
+    if (error) throw error;
+    return data as {
+      discover_enabled: boolean;
+      readiness_target: number;
+      last_changed_by_email: string | null;
+      last_changed_at: string;
+      total_registered_users: number;
+      completed_profiles_count: number;
+      eligible_users_count: number;
+      city_counts: Record<string, number>;
+      night_counts: Record<string, number>;
+    };
+  });
+
+/**
+ * Toggle Discover feature flag or update target.
+ */
+export const toggleAdminDiscoverLaunch = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: { enabled: boolean; target?: number | undefined; readinessTarget?: number | undefined }) => ({
+    enabled: Boolean(d.enabled),
+    target: d.target ?? d.readinessTarget ? Math.max(1, Number(d.target ?? d.readinessTarget)) : undefined,
+  }))
+  .handler(async ({ data, context }) => {
+    const admin = await assertAdminCaller(context.userId);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+
+    type LaunchControlUpdate = Database["public"]["Tables"]["launch_control"]["Update"];
+    const patch: LaunchControlUpdate = {
+      discover_enabled: data.enabled,
+      last_changed_by: context.userId,
+      last_changed_by_email: admin.email,
+      last_changed_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+
+    if (data.target) {
+      patch.readiness_target = data.target;
+    }
+
+    const { error } = await supabaseAdmin
+      .from("launch_control")
+      .update(patch)
+      .eq("id", "global");
+
+    if (error) throw error;
+
+    // Record in audit log
+    await supabaseAdmin.from("admin_audit_logs").insert({
+      actor_id: context.userId,
+      actor_email: admin.email,
+      action: data.enabled ? "LAUNCH_CONTROL_ENABLE" : "LAUNCH_CONTROL_DISABLE",
+      target_id: "global",
+      details: {
+        discover_enabled: data.enabled,
+        readiness_target: data.target,
+      },
+    });
+
+    return { ok: true, enabled: data.enabled };
   });

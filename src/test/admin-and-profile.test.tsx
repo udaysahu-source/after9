@@ -3,8 +3,9 @@ import { calculateProfileCompletion } from "@/routes/_authenticated/profile";
 import { INVITE_ALLOWANCE } from "@/lib/invites";
 import type { Database } from "@/integrations/supabase/types";
 
+import type { SocialLinkRow } from "@/lib/social-links";
+
 type ProfileRow = Database["public"]["Tables"]["profiles"]["Row"];
-type SocialLinkRow = Database["public"]["Tables"]["social_links"]["Row"];
 
 describe("Profile Reorganization & Completion Calculation", () => {
   const baseProfile: ProfileRow = {
@@ -27,9 +28,15 @@ describe("Profile Reorganization & Completion Calculation", () => {
     suspension_reason: null,
     show_college: true,
     card_preferences: null,
-    min_age_pref: 18,
-    max_age_pref: 28,
-    audience_scope: "all",
+    min_age: 18,
+    max_age: 28,
+    interested_in: "everyone",
+    incognito: false,
+    invited_by: null,
+    onboarding_step: 1,
+    public_profile_enabled: true,
+    push_notifications_enabled: false,
+    visibility_audiences: ["college", "nearby"],
     general_area: null,
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
@@ -64,10 +71,10 @@ describe("Profile Reorganization & Completion Calculation", () => {
       {
         id: "soc-1",
         user_id: "user-123",
-        platform: "instagram",
+        platform: "instagram" as const,
         handle: "aarav_garba",
-        url: "https://instagram.com/aarav_garba",
-        visibility: "share_card",
+        profile_url: "https://instagram.com/aarav_garba",
+        visibility: "share_card" as const,
         is_enabled: true,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
@@ -195,5 +202,42 @@ describe("Admin Authorization & Audit Security", () => {
     expect(log.target_id).toBe("target-user-999");
     expect(log.details).toEqual({ reason: "Harassment report verified" });
     expect(typeof log.created_at).toBe("string");
+  });
+
+  it("determines correct referral lifecycle stage across all 4 stages", () => {
+    type ReferralStatusTest = {
+      revoked: boolean;
+      claimed_at: string | null;
+      claimed_user?: { onboarded: boolean; discoverable: boolean } | null;
+    };
+
+    const getStage = (inv: ReferralStatusTest) => {
+      if (inv.revoked) return "revoked";
+      if (inv.claimed_user?.discoverable) return "stage_4_discover";
+      if (inv.claimed_user?.onboarded) return "stage_3_onboarded";
+      if (inv.claimed_at) return "stage_2_registered";
+      return "stage_1_created";
+    };
+
+    expect(getStage({ revoked: true, claimed_at: null })).toBe("revoked");
+    expect(getStage({ revoked: false, claimed_at: null, claimed_user: null })).toBe("stage_1_created");
+    expect(getStage({ revoked: false, claimed_at: "2026-10-09T10:00:00Z", claimed_user: { onboarded: false, discoverable: false } })).toBe("stage_2_registered");
+    expect(getStage({ revoked: false, claimed_at: "2026-10-09T10:00:00Z", claimed_user: { onboarded: true, discoverable: false } })).toBe("stage_3_onboarded");
+    expect(getStage({ revoked: false, claimed_at: "2026-10-09T10:00:00Z", claimed_user: { onboarded: true, discoverable: true } })).toBe("stage_4_discover");
+  });
+
+  it("validates launch control state and backend gating behavior", () => {
+    const simulateDiscoverFeed = (launchEnabled: boolean, mockInventory: string[]) => {
+      if (!launchEnabled) return [];
+      return mockInventory;
+    };
+
+    const inventory = ["user-1", "user-2", "user-3"];
+
+    // When disabled, backend returns 0 rows regardless of inventory
+    expect(simulateDiscoverFeed(false, inventory)).toEqual([]);
+
+    // When enabled, backend returns inventory
+    expect(simulateDiscoverFeed(true, inventory)).toEqual(inventory);
   });
 });

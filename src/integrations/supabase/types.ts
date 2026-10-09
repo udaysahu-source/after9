@@ -358,6 +358,39 @@ export type Database = {
         }
         Relationships: []
       }
+      launch_control: {
+        Row: {
+          created_at: string
+          discover_enabled: boolean
+          id: string
+          last_changed_at: string
+          last_changed_by: string | null
+          last_changed_by_email: string | null
+          readiness_target: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          discover_enabled?: boolean
+          id?: string
+          last_changed_at?: string
+          last_changed_by?: string | null
+          last_changed_by_email?: string | null
+          readiness_target?: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          discover_enabled?: boolean
+          id?: string
+          last_changed_at?: string
+          last_changed_by?: string | null
+          last_changed_by_email?: string | null
+          readiness_target?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       messages: {
         Row: {
           body: string
@@ -688,6 +721,20 @@ export type Database = {
       get_launch_analytics: {
         Args: Record<PropertyKey, never>
         Returns: Json
+      }
+      get_launch_control: {
+        Args: never
+        Returns: {
+          discover_enabled: boolean
+          readiness_target: number
+          last_changed_by_email: string | null
+          last_changed_at: string
+          total_registered_users: number
+          completed_profiles_count: number
+          eligible_users_count: number
+          city_counts: Record<string, number>
+          night_counts: Record<string, number>
+        }
       }
       discover_feed: {
         Args: never

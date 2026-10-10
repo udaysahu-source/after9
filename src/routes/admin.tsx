@@ -48,6 +48,7 @@ import {
   createAdminInvite,
   listAdminEvents,
   saveAdminEvent,
+  toggleAdminEventPublishStatus,
   verifyAdminEvent,
   deleteAdminEvent,
   listAdminEventSuggestions,
@@ -89,6 +90,7 @@ function AdminDashboard() {
   const createInvite = useServerFn(createAdminInvite);
   const getEvents = useServerFn(listAdminEvents);
   const saveEvent = useServerFn(saveAdminEvent);
+  const togglePublish = useServerFn(toggleAdminEventPublishStatus);
   const verifyEvent = useServerFn(verifyAdminEvent);
   const deleteEvent = useServerFn(deleteAdminEvent);
   const getEventSuggestions = useServerFn(listAdminEventSuggestions);
@@ -152,6 +154,7 @@ function AdminDashboard() {
   const [events, setEvents] = useState<any[]>([]);
   const [eventsLoading, setEventsLoading] = useState(false);
   const [eventSubTab, setEventSubTab] = useState<"listings" | "suggestions">("listings");
+  const [eventPublishFilter, setEventPublishFilter] = useState<"all" | "published" | "draft">("all");
   const [eventSuggestions, setEventSuggestions] = useState<any[]>([]);
   const [eventModalOpen, setEventModalOpen] = useState(false);
   const [deleteEventModal, setDeleteEventModal] = useState<any | null>(null);
@@ -174,6 +177,12 @@ function AdminDashboard() {
     min_price_inr: "",
     price_source: "",
     source_notes: "",
+    maps_url: "",
+    instagram_handle: "",
+    contact_verified: "",
+    location_confidence: "",
+    poster_content_notes: "",
+    verification_notes: "",
     verification_status: "pending_verification",
     publication_status: "published",
     is_active: true,
@@ -2137,150 +2146,260 @@ function AdminDashboard() {
               </div>
 
               {eventSubTab === "listings" ? (
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                  {events.map((ev) => {
-                    const isVerified = ev.verification_status === "verified";
-                    const isPending = ev.verification_status === "pending_verification";
+                <div className="space-y-4">
+                  {/* Publication Status Filter Tabs */}
+                  <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
+                    <button
+                      type="button"
+                      onClick={() => setEventPublishFilter("all")}
+                      className={`rounded-xl px-3 py-1.5 text-xs font-bold transition ${
+                        eventPublishFilter === "all"
+                          ? "bg-primary text-primary-foreground shadow-xs"
+                          : "bg-card border border-border/80 text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      All Events ({events.length})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEventPublishFilter("published")}
+                      className={`rounded-xl px-3 py-1.5 text-xs font-bold transition ${
+                        eventPublishFilter === "published"
+                          ? "bg-teal-600 text-white shadow-xs"
+                          : "bg-card border border-border/80 text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      Published ({events.filter((e) => e.publication_status === "published").length})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEventPublishFilter("draft")}
+                      className={`rounded-xl px-3 py-1.5 text-xs font-bold transition ${
+                        eventPublishFilter === "draft"
+                          ? "bg-amber-600 text-white shadow-xs"
+                          : "bg-card border border-border/80 text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      Drafts / Pending Review ({events.filter((e) => e.publication_status === "draft").length})
+                    </button>
+                  </div>
 
-                    return (
-                      <div key={ev.id} className="rounded-2xl border border-border/80 bg-card p-4 shadow-xs space-y-3 flex flex-col justify-between">
-                        <div className="space-y-2">
-                          {ev.poster_url && (
-                            <div className="h-32 w-full rounded-xl overflow-hidden bg-muted border border-border/60 relative">
-                              <img
-                                src={ev.poster_url}
-                                alt={ev.title}
-                                className="h-full w-full object-cover"
-                                onError={(e) => {
-                                  (e.target as HTMLElement).style.display = "none";
-                                }}
-                              />
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                    {events
+                      .filter((ev) => eventPublishFilter === "all" || ev.publication_status === eventPublishFilter)
+                      .map((ev) => {
+                        const isVerified = ev.verification_status === "verified";
+                        const isPending = ev.verification_status === "pending_verification";
+                        const isPublished = ev.publication_status === "published";
+
+                        return (
+                          <div
+                            key={ev.id}
+                            className={`rounded-2xl border bg-card p-4 shadow-xs space-y-3 flex flex-col justify-between transition ${
+                              isPublished ? "border-border/80" : "border-amber-500/40 bg-amber-500/5"
+                            }`}
+                          >
+                            <div className="space-y-2">
+                              {ev.poster_url && (
+                                <div className="h-32 w-full rounded-xl overflow-hidden bg-muted border border-border/60 relative">
+                                  <img
+                                    src={ev.poster_url}
+                                    alt={ev.title}
+                                    className="h-full w-full object-cover"
+                                    onError={(e) => {
+                                      (e.target as HTMLElement).style.display = "none";
+                                    }}
+                                  />
+                                </div>
+                              )}
+
+                              <div className="flex items-start justify-between gap-2">
+                                <span
+                                  className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold ${
+                                    isVerified
+                                      ? "bg-teal-500/15 text-teal-700 dark:text-teal-300 border border-teal-500/30"
+                                      : isPending
+                                      ? "bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30"
+                                      : "bg-muted text-muted-foreground"
+                                  }`}
+                                >
+                                  {isVerified ? "✓ Verified" : isPending ? "⏳ Pending Review" : ev.verification_status}
+                                </span>
+                                <span
+                                  className={`rounded-full px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider ${
+                                    isPublished
+                                      ? "bg-teal-500/15 text-teal-700 dark:text-teal-300 border border-teal-500/30"
+                                      : "bg-amber-500/20 text-amber-800 dark:text-amber-300 border border-amber-500/40"
+                                  }`}
+                                >
+                                  {isPublished ? "● Published" : "○ Draft (Hidden)"}
+                                </span>
+                              </div>
+
+                              <h3 className="font-display text-base font-extrabold text-primary leading-snug">{ev.title}</h3>
+                              <p className="text-xs text-muted-foreground">
+                                📍 {ev.venue}
+                                {ev.area ? ` · ${ev.area}` : ""}, {ev.city}
+                              </p>
+
+                              <div className="text-[11px] text-muted-foreground space-y-1 pt-1">
+                                {ev.start_date && (
+                                  <p>
+                                    📅 {ev.start_date} {ev.end_date && ev.end_date !== ev.start_date ? `to ${ev.end_date}` : ""}
+                                  </p>
+                                )}
+                                {ev.organizer && <p>👤 {ev.organizer}</p>}
+                                {ev.ticket_price_range && <p>🎟 {ev.ticket_price_range}</p>}
+                                {ev.contact_verified && <p>📞 Passes: {ev.contact_verified}</p>}
+
+                                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 pt-0.5">
+                                  {ev.maps_url && (
+                                    <a
+                                      href={ev.maps_url}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="text-[11px] font-bold text-action hover:underline"
+                                    >
+                                      Maps ↗
+                                    </a>
+                                  )}
+                                  {ev.instagram_handle && (
+                                    <a
+                                      href={`https://instagram.com/${ev.instagram_handle.replace(/^@/, "")}`}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="text-[11px] font-bold text-action hover:underline"
+                                    >
+                                      IG: {ev.instagram_handle} ↗
+                                    </a>
+                                  )}
+                                  {ev.booking_url && (
+                                    <a
+                                      href={ev.booking_url}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="text-[11px] font-bold text-teal-600 hover:underline"
+                                    >
+                                      Tickets ↗
+                                    </a>
+                                  )}
+                                </div>
+
+                                {ev.verification_notes && (
+                                  <p className="text-[10px] text-amber-800 dark:text-amber-300 font-medium bg-amber-500/10 p-2 rounded-lg border border-amber-500/25">
+                                    🔍 <strong>Review note:</strong> {ev.verification_notes}
+                                  </p>
+                                )}
+                                {ev.poster_content_notes && (
+                                  <p className="text-[10px] text-muted-foreground/90 bg-muted/40 p-2 rounded-lg line-clamp-2">
+                                    📋 {ev.poster_content_notes}
+                                  </p>
+                                )}
+                              </div>
                             </div>
-                          )}
 
-                          <div className="flex items-start justify-between gap-2">
-                            <span
-                              className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold ${
-                                isVerified
-                                  ? "bg-teal-500/15 text-teal-700 dark:text-teal-300 border border-teal-500/30"
-                                  : isPending
-                                  ? "bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30"
-                                  : "bg-muted text-muted-foreground"
-                              }`}
-                            >
-                              {isVerified ? "✓ Verified" : isPending ? "⏳ Pending Review" : ev.verification_status}
-                            </span>
-                            <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">
-                              {ev.publication_status}
-                            </span>
+                            <div className="pt-3 border-t border-border/60 flex flex-wrap items-center justify-between gap-1.5">
+                              <div className="flex items-center gap-1.5">
+                                <button
+                                  type="button"
+                                  onClick={async () => {
+                                    const nextStatus = isPublished ? "draft" : "published";
+                                    await togglePublish({ data: { eventId: ev.id, status: nextStatus } });
+                                    toast.success(
+                                      nextStatus === "published"
+                                        ? "Event published to public feed!"
+                                        : "Event converted to draft (hidden)."
+                                    );
+                                    loadTabData();
+                                  }}
+                                  className={`rounded-lg px-2.5 py-1 text-[11px] font-bold transition shadow-2xs ${
+                                    isPublished
+                                      ? "bg-amber-500/15 text-amber-700 hover:bg-amber-500/25 border border-amber-500/30"
+                                      : "bg-teal-600 text-white hover:bg-teal-700"
+                                  }`}
+                                >
+                                  {isPublished ? "Make Draft" : "Publish 🚀"}
+                                </button>
+
+                                <button
+                                  type="button"
+                                  onClick={async () => {
+                                    const newVerdict = !isVerified;
+                                    await verifyEvent({ data: { eventId: ev.id, verified: newVerdict } });
+                                    toast.success(newVerdict ? "Event marked verified!" : "Event marked unverified.");
+                                    loadTabData();
+                                  }}
+                                  className={`rounded-lg px-2 py-1 text-[11px] font-bold transition ${
+                                    isVerified
+                                      ? "bg-muted text-muted-foreground hover:bg-muted/80"
+                                      : "bg-teal-500/15 text-teal-700 hover:bg-teal-500/25"
+                                  }`}
+                                >
+                                  {isVerified ? "Unverify" : "Verify ✓"}
+                                </button>
+                              </div>
+
+                              <div className="flex items-center gap-1.5">
+                                <Link
+                                  to="/plan/$id"
+                                  params={{ id: ev.slug || ev.id }}
+                                  className="text-[11px] font-semibold text-action hover:underline px-1"
+                                >
+                                  Preview ↗
+                                </Link>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setEditingEvent({
+                                      id: ev.id,
+                                      title: ev.title,
+                                      slug: ev.slug || "",
+                                      venue: ev.venue,
+                                      area: ev.area || "",
+                                      address: ev.address || "",
+                                      city: ev.city || "Raipur",
+                                      state: ev.state || "Chhattisgarh",
+                                      start_date: ev.start_date || "",
+                                      end_date: ev.end_date || "",
+                                      start_time: ev.start_time || "",
+                                      end_time: ev.end_time || "",
+                                      organizer: ev.organizer || "",
+                                      poster_url: ev.poster_url || "",
+                                      booking_url: ev.booking_url || "",
+                                      ticket_price_range: ev.ticket_price_range || "",
+                                      min_price_inr: ev.min_price_inr ?? "",
+                                      price_source: ev.price_source || "",
+                                      source_notes: ev.source_notes || "",
+                                      maps_url: ev.maps_url || "",
+                                      instagram_handle: ev.instagram_handle || "",
+                                      contact_verified: ev.contact_verified || "",
+                                      location_confidence: ev.location_confidence || "",
+                                      poster_content_notes: ev.poster_content_notes || "",
+                                      verification_notes: ev.verification_notes || "",
+                                      verification_status: ev.verification_status || "pending_verification",
+                                      publication_status: ev.publication_status || "published",
+                                      is_active: ev.is_active ?? true,
+                                    });
+                                    setEventModalOpen(true);
+                                  }}
+                                  className="rounded-lg border border-border/80 px-2 py-1 text-[11px] font-bold text-foreground hover:bg-muted"
+                                >
+                                  Edit
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setDeleteEventModal(ev)}
+                                  className="rounded-lg border border-destructive/30 bg-destructive/10 p-1 text-destructive hover:bg-destructive/20 transition"
+                                  title="Delete Event"
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </button>
+                              </div>
+                            </div>
                           </div>
-
-                          <h3 className="font-display text-base font-extrabold text-primary leading-snug">{ev.title}</h3>
-                          <p className="text-xs text-muted-foreground">
-                            📍 {ev.venue}
-                            {ev.area ? ` · ${ev.area}` : ""}, {ev.city}
-                          </p>
-
-                          <div className="text-[11px] text-muted-foreground space-y-0.5 pt-1">
-                            {ev.start_date && (
-                              <p>
-                                📅 {ev.start_date} {ev.end_date && ev.end_date !== ev.start_date ? `to ${ev.end_date}` : ""}
-                              </p>
-                            )}
-                            {ev.organizer && <p>👤 {ev.organizer}</p>}
-                            {ev.ticket_price_range && <p>🎟 {ev.ticket_price_range}</p>}
-                            {ev.booking_url && (
-                              <a
-                                href={ev.booking_url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="inline-flex items-center gap-1 text-[11px] font-semibold text-action hover:underline mt-0.5"
-                              >
-                                <span>Official Booking / Tickets ↗</span>
-                              </a>
-                            )}
-                            {ev.source_notes && (
-                              <p className="text-[10px] italic line-clamp-2 mt-1 text-muted-foreground/80 bg-muted/40 p-1.5 rounded-lg">
-                                📝 {ev.source_notes}
-                              </p>
-                            )}
-                          </div>
-                        </div>
-
-                        <div className="pt-3 border-t border-border/60 flex items-center justify-between gap-1">
-                          <div className="flex items-center gap-1.5">
-                            <button
-                              type="button"
-                              onClick={async () => {
-                                const newVerdict = !isVerified;
-                                await verifyEvent({ data: { eventId: ev.id, verified: newVerdict } });
-                                toast.success(newVerdict ? "Event marked verified!" : "Event marked unverified.");
-                                loadTabData();
-                              }}
-                              className={`rounded-lg px-2.5 py-1 text-[11px] font-bold transition ${
-                                isVerified
-                                  ? "bg-amber-500/15 text-amber-700 hover:bg-amber-500/25"
-                                  : "bg-teal-500/15 text-teal-700 hover:bg-teal-500/25"
-                              }`}
-                            >
-                              {isVerified ? "Unverify" : "Verify ✓"}
-                            </button>
-                            <Link
-                              to="/plan/$id"
-                              params={{ id: ev.slug || ev.id }}
-                              className="text-[11px] font-semibold text-action hover:underline"
-                            >
-                              Preview ↗
-                            </Link>
-                          </div>
-
-                          <div className="flex items-center gap-1.5">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setEditingEvent({
-                                  id: ev.id,
-                                  title: ev.title,
-                                  slug: ev.slug || "",
-                                  venue: ev.venue,
-                                  area: ev.area || "",
-                                  address: ev.address || "",
-                                  city: ev.city || "Raipur",
-                                  state: ev.state || "Chhattisgarh",
-                                  start_date: ev.start_date || "",
-                                  end_date: ev.end_date || "",
-                                  start_time: ev.start_time || "",
-                                  end_time: ev.end_time || "",
-                                  organizer: ev.organizer || "",
-                                  poster_url: ev.poster_url || "",
-                                  booking_url: ev.booking_url || "",
-                                  ticket_price_range: ev.ticket_price_range || "",
-                                  min_price_inr: ev.min_price_inr || "",
-                                  price_source: ev.price_source || "",
-                                  source_notes: ev.source_notes || "",
-                                  verification_status: ev.verification_status || "pending_verification",
-                                  publication_status: ev.publication_status || "published",
-                                  is_active: ev.is_active ?? true,
-                                });
-                                setEventModalOpen(true);
-                              }}
-                              className="rounded-lg border border-border/80 px-2.5 py-1 text-[11px] font-bold text-foreground hover:bg-muted"
-                            >
-                              Edit
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setDeleteEventModal(ev)}
-                              className="rounded-lg border border-destructive/30 bg-destructive/10 p-1 text-destructive hover:bg-destructive/20 transition"
-                              title="Delete Event"
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
+                        );
+                      })}
+                  </div>
                 </div>
               ) : (
                 /* Community Suggestions Sub-tab */
@@ -2832,22 +2951,102 @@ function AdminDashboard() {
                 </div>
               </div>
 
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="font-semibold text-foreground">Official Booking URL</label>
+                  <input
+                    type="url"
+                    placeholder="https://..."
+                    value={editingEvent.booking_url || ""}
+                    onChange={(e) => setEditingEvent({ ...editingEvent, booking_url: e.target.value })}
+                    className="mt-1 w-full rounded-xl border border-border bg-card px-3 py-2 text-xs"
+                  />
+                </div>
+                <div>
+                  <label className="font-semibold text-foreground">Google Maps URL</label>
+                  <input
+                    type="url"
+                    placeholder="https://www.google.com/maps/search/?api=1&query=..."
+                    value={editingEvent.maps_url || ""}
+                    onChange={(e) => setEditingEvent({ ...editingEvent, maps_url: e.target.value })}
+                    className="mt-1 w-full rounded-xl border border-border bg-card px-3 py-2 text-xs"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="font-semibold text-foreground">Instagram Handle</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. @samta_raasgarba"
+                    value={editingEvent.instagram_handle || ""}
+                    onChange={(e) => setEditingEvent({ ...editingEvent, instagram_handle: e.target.value })}
+                    className="mt-1 w-full rounded-xl border border-border bg-card px-3 py-2 text-xs"
+                  />
+                </div>
+                <div>
+                  <label className="font-semibold text-foreground">Pass Enquiries / Contacts</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. +91 7000656161; +91 7566665557"
+                    value={editingEvent.contact_verified || ""}
+                    onChange={(e) => setEditingEvent({ ...editingEvent, contact_verified: e.target.value })}
+                    className="mt-1 w-full rounded-xl border border-border bg-card px-3 py-2 text-xs"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="font-semibold text-foreground">Poster Image URL</label>
+                  <input
+                    type="text"
+                    placeholder="https://.../event-posters/poster.jpg"
+                    value={editingEvent.poster_url || ""}
+                    onChange={(e) => setEditingEvent({ ...editingEvent, poster_url: e.target.value })}
+                    className="mt-1 w-full rounded-xl border border-border bg-card px-3 py-2 text-xs"
+                  />
+                </div>
+                <div>
+                  <label className="font-semibold text-foreground">Location Confidence</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. venue-level address known / approximate"
+                    value={editingEvent.location_confidence || ""}
+                    onChange={(e) => setEditingEvent({ ...editingEvent, location_confidence: e.target.value })}
+                    className="mt-1 w-full rounded-xl border border-border bg-card px-3 py-2 text-xs"
+                  />
+                </div>
+              </div>
+
               <div>
-                <label className="font-semibold text-foreground">Official Booking URL</label>
-                <input
-                  type="url"
-                  placeholder="https://..."
-                  value={editingEvent.booking_url || ""}
-                  onChange={(e) => setEditingEvent({ ...editingEvent, booking_url: e.target.value })}
+                <label className="font-semibold text-foreground">Poster Content Notes (extracted info)</label>
+                <textarea
+                  rows={2}
+                  placeholder="Dates, chief guests, performers, rules (e.g. traditional dress only)..."
+                  value={editingEvent.poster_content_notes || ""}
+                  onChange={(e) => setEditingEvent({ ...editingEvent, poster_content_notes: e.target.value })}
                   className="mt-1 w-full rounded-xl border border-border bg-card px-3 py-2 text-xs"
                 />
               </div>
 
               <div>
-                <label className="font-semibold text-foreground">Source Notes / Poster Details</label>
+                <label className="font-semibold text-foreground">Verification Notes (internal review)</label>
                 <textarea
                   rows={2}
-                  placeholder="Notes from poster, contact numbers, or program details..."
+                  placeholder="Conflicts observed, pending checks, or organizer confirmation status..."
+                  value={editingEvent.verification_notes || ""}
+                  onChange={(e) => setEditingEvent({ ...editingEvent, verification_notes: e.target.value })}
+                  className="mt-1 w-full rounded-xl border border-border bg-card px-3 py-2 text-xs"
+                />
+              </div>
+
+              <div>
+                <label className="font-semibold text-foreground">General Source Notes</label>
+                <textarea
+                  rows={2}
+                  placeholder="Source attribution and provenance..."
                   value={editingEvent.source_notes || ""}
                   onChange={(e) => setEditingEvent({ ...editingEvent, source_notes: e.target.value })}
                   className="mt-1 w-full rounded-xl border border-border bg-card px-3 py-2 text-xs"

@@ -633,6 +633,12 @@ export const saveAdminEvent = createServerFn({ method: "POST" })
     contact_verified?: string | undefined;
     themes_count?: number | undefined;
     highlights?: string[] | undefined;
+    maps_url?: string | undefined;
+    instagram_handle?: string | undefined;
+    location_confidence?: string | undefined;
+    poster_content_notes?: string | undefined;
+    verification_notes?: string | undefined;
+    image_asset_file?: string | undefined;
     verification_status?: string | undefined;
     publication_status?: string | undefined;
     is_active?: boolean | undefined;
@@ -662,6 +668,12 @@ export const saveAdminEvent = createServerFn({ method: "POST" })
     contact_verified: d.contact_verified ? String(d.contact_verified).trim() : undefined,
     themes_count: d.themes_count !== undefined ? Number(d.themes_count) : undefined,
     highlights: Array.isArray(d.highlights) ? d.highlights : undefined,
+    maps_url: d.maps_url ? String(d.maps_url).trim() : undefined,
+    instagram_handle: d.instagram_handle ? String(d.instagram_handle).trim() : undefined,
+    location_confidence: d.location_confidence ? String(d.location_confidence).trim() : undefined,
+    poster_content_notes: d.poster_content_notes ? String(d.poster_content_notes).trim() : undefined,
+    verification_notes: d.verification_notes ? String(d.verification_notes).trim() : undefined,
+    image_asset_file: d.image_asset_file ? String(d.image_asset_file).trim() : undefined,
     verification_status: d.verification_status ?? "unverified",
     publication_status: d.publication_status ?? "published",
     is_active: d.is_active ?? true,
@@ -694,6 +706,12 @@ export const saveAdminEvent = createServerFn({ method: "POST" })
       contact_verified: data.contact_verified ?? null,
       themes_count: data.themes_count ?? null,
       highlights: data.highlights ? JSON.stringify(data.highlights) : undefined,
+      maps_url: data.maps_url ?? null,
+      instagram_handle: data.instagram_handle ?? null,
+      location_confidence: data.location_confidence ?? null,
+      poster_content_notes: data.poster_content_notes ?? null,
+      verification_notes: data.verification_notes ?? null,
+      image_asset_file: data.image_asset_file ?? null,
       verification_status: data.verification_status,
       publication_status: data.publication_status,
       is_active: data.is_active,
@@ -726,6 +744,40 @@ export const saveAdminEvent = createServerFn({ method: "POST" })
     });
 
     return { ok: true };
+  });
+
+/**
+ * Toggle event publication status (published vs draft).
+ */
+export const toggleAdminEventPublishStatus = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .validator((d: { eventId: string; status: "published" | "draft" }) => ({
+    eventId: String(d.eventId).trim(),
+    status: d.status,
+  }))
+  .handler(async ({ data, context }) => {
+    const admin = await assertAdminCaller(context.userId, context.claims?.email, context.supabase);
+    const db = await getAdminDb(context);
+
+    const { error } = await db
+      .from("events")
+      .update({
+        publication_status: data.status,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", data.eventId);
+
+    if (error) throw error;
+
+    await db.from("admin_audit_logs").insert({
+      actor_id: context.userId,
+      actor_email: admin.email,
+      action: data.status === "published" ? "PUBLISH_EVENT" : "UNPUBLISH_EVENT",
+      target_id: data.eventId,
+      details: { publication_status: data.status },
+    });
+
+    return { ok: true, status: data.status };
   });
 
 /**

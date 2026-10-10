@@ -80,11 +80,22 @@ const FESTIVAL_DATES_2026: Array<{ iso: string; weekday: string; day: string; mo
 const RAIPUR_LOCALITIES = [
   { id: "all", label: "All Raipur" },
   { id: "vip road", label: "VIP Road" },
-  { id: "avadhpuri", label: "Avadhpuri" },
-  { id: "telibandha", label: "Telibandha" },
-  { id: "shankar nagar", label: "Shankar Nagar" },
-  { id: "naya raipur", label: "Naya Raipur" },
   { id: "samta colony", label: "Samta Colony" },
+  { id: "gudhiyari", label: "Shrinagar / Gudhiyari" },
+  { id: "shankar nagar", label: "Shankar Nagar" },
+  { id: "vidhan sabha", label: "Vidhan Sabha / Saddu" },
+  { id: "kabir nagar", label: "Kabir Nagar" },
+  { id: "tikrapara", label: "Tikrapara" },
+  { id: "budhapara", label: "Budhapara" },
+  { id: "zora", label: "Zora" },
+  { id: "nava raipur", label: "Nava Raipur / Atal Nagar" },
+  { id: "airport", label: "Airport Road" },
+  { id: "kalibadi", label: "Kalibadi" },
+  { id: "mathpurena", label: "Mathpurena" },
+  { id: "labhandih", label: "Labhandih / Ambuja" },
+  { id: "swarnabhoomi", label: "Swarnabhoomi" },
+  { id: "serikhedi", label: "Serikhedi" },
+  { id: "dunda", label: "Dunda" },
 ];
 
 function PlanPage() {

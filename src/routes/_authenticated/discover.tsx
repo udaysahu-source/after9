@@ -32,6 +32,8 @@ import { toast } from "sonner";
 import { NotificationBell } from "@/components/notifications-popover";
 import { EarlyCommunityView } from "@/components/early-community-view";
 import { MatchCommunicationScreen } from "@/components/match-communication-screen";
+import { FestiveConfetti } from "@/components/festive-confetti";
+import { playDandiyaClackSound, playCelebrationChime } from "@/lib/sound-effects";
 
 export const Route = createFileRoute("/_authenticated/discover")({
   head: () => ({
@@ -66,6 +68,8 @@ function Discover() {
   const [launchControl, setLaunchControl] = useState<any>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [adminToggling, setAdminToggling] = useState(false);
+  const [easterEggConfetti, setEasterEggConfetti] = useState(false);
+  const [logoTaps, setLogoTaps] = useState(0);
 
   const checkAdmin = useServerFn(checkAdminStatus);
   const toggleLaunch = useServerFn(toggleAdminDiscoverLaunch);
@@ -258,6 +262,9 @@ function Discover() {
   const act = async (dir: "send" | "pass", openChat = false) => {
     if (!top || !me || fly) return;
     Analytics.dandiyaSent(dir);
+    if (dir === "send") {
+      playDandiyaClackSound();
+    }
     setFly(dir === "send" ? 1 : -1);
     setDragRatio(dir === "send" ? 1 : -1);
     await new Promise((r) => setTimeout(r, 260));
@@ -302,13 +309,39 @@ function Discover() {
     return () => window.removeEventListener("keydown", k);
   });
 
+  const handleLogoTap = () => {
+    const nextCount = logoTaps + 1;
+    setLogoTaps(nextCount);
+    playDandiyaClackSound();
+    if (nextCount >= 5) {
+      setLogoTaps(0);
+      setEasterEggConfetti(true);
+      playCelebrationChime();
+      toast.success("✨ Garba Night Easter Egg unlocked! Have an electric Navratri in Raipur! 🪘", {
+        duration: 3500,
+      });
+    }
+  };
+
   return (
     <Shell maxWidth="wide">
+      {easterEggConfetti && (
+        <FestiveConfetti
+          count={80}
+          durationMs={2800}
+          onComplete={() => setEasterEggConfetti(false)}
+        />
+      )}
       <header className="mx-auto flex w-full max-w-md md:max-w-4xl lg:max-w-5xl items-center justify-between px-5 pb-3 pt-5">
-        <div className="flex items-center gap-2">
-          <AppIcon className="h-8 w-8" />
+        <button
+          type="button"
+          onClick={handleLogoTap}
+          className="flex items-center gap-2 text-left touch-tactile transition-transform hover:scale-[1.03] active:scale-95"
+          title="After9 Dandiya Deck"
+        >
+          <AppIcon className="h-8 w-8 transition-transform group-hover:rotate-6" />
           <Wordmark className="text-2xl text-primary" />
-        </div>
+        </button>
         <div className="flex items-center gap-2">
           {isAdmin && (
             <Link

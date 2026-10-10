@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link } from "@tanstack/react-router";
 import { Dandiya } from "@/components/after9";
 import {
@@ -101,8 +101,26 @@ export function DiscoveryStateView({
   }
 }
 
-/** 1. Loading Skeleton with Warm Editorial Shimmer */
+/** 1. Loading Skeleton with Warm Editorial Shimmer & Rotating Festive Quotes */
+const FESTIVE_LOADING_MESSAGES = [
+  { title: "Dhol beats are warming up…", sub: "Gathering tonight's Raipur Garba circles" },
+  { title: "Checking Dandiya passes…", sub: "Connecting dancers with matching festival nights" },
+  { title: "Polishing festival lights…", sub: "Finding your crew across VIP Road & Shankar Nagar" },
+  { title: "Matching 18+ verified profiles…", sub: "Real dancers only on the festival floor" },
+];
+
 function LoadingState() {
+  const [msgIdx, setMsgIdx] = useState(0);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setMsgIdx((prev) => (prev + 1) % FESTIVE_LOADING_MESSAGES.length);
+    }, 2200);
+    return () => clearInterval(timer);
+  }, []);
+
+  const activeMsg = FESTIVE_LOADING_MESSAGES[msgIdx]!;
+
   return (
     <div className="flex flex-1 flex-col items-center justify-center p-6 text-center animate-fade-in min-h-[460px]">
       <div className="relative aspect-[3/4] w-full max-w-sm overflow-hidden rounded-2xl border border-border/60 bg-gradient-to-b from-card via-card/70 to-card/40 p-6 shadow-sm">
@@ -115,12 +133,21 @@ function LoadingState() {
             <div className="h-6 w-16 rounded-full bg-muted animate-pulse" />
           </div>
 
-          <div className="flex flex-col items-center gap-3 py-12">
-            <div className="relative flex h-16 w-16 items-center justify-center rounded-2xl bg-action/10 text-action">
-              <Dandiya className="h-9 w-9 animate-pulse-gentle" />
+          <div className="flex flex-col items-center gap-3 py-10">
+            <div className="relative flex h-20 w-20 items-center justify-center rounded-3xl bg-action/15 text-action shadow-inner border border-action/30 animate-bounce-soft">
+              <Dandiya className="h-10 w-10 text-action animate-pulse-gentle" />
+              <span className="absolute -top-1 -right-1 text-sm animate-ping">✨</span>
             </div>
-            <p className="font-display text-lg font-bold text-primary">Connecting to the floor…</p>
-            <p className="text-xs text-muted-foreground">Finding Garba circles in Raipur</p>
+            <div className="space-y-1.5 transition-all duration-300">
+              <p className="font-display text-lg font-bold text-primary">Connecting to the floor…</p>
+              <p className="text-xs text-muted-foreground">Finding Garba circles in Raipur</p>
+              <div className="pt-2">
+                <span className="inline-flex items-center gap-1 rounded-full border border-action/30 bg-action/10 px-3 py-1 text-[11px] font-bold text-action animate-fade-in" key={activeMsg.title}>
+                  <span>🪘</span>
+                  <span>{activeMsg.title}</span>
+                </span>
+              </div>
+            </div>
           </div>
 
           <div className="space-y-2">

@@ -22,6 +22,8 @@ import {
 import { toast } from "sonner";
 import { submitLivePhotoVerification } from "@/lib/verify.functions";
 import { useServerFn } from "@tanstack/react-start";
+import { FestiveConfetti } from "@/components/festive-confetti";
+import { playCelebrationChime } from "@/lib/sound-effects";
 
 interface PhotoVerificationModalProps {
   open: boolean;
@@ -44,6 +46,7 @@ export function PhotoVerificationModal({
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [capturedDataUrl, setCapturedDataUrl] = useState<string | null>(null);
   const [cameraError, setCameraError] = useState<string | null>(null);
+  const [showConfetti, setShowConfetti] = useState(false);
   const [result, setResult] = useState<{
     status: "approved" | "needs_review" | "rejected";
     reason: string;
@@ -218,6 +221,8 @@ export function PhotoVerificationModal({
       setStep("result");
 
       if (res.status === "approved") {
+        setShowConfetti(true);
+        playCelebrationChime();
         toast.success("Photo verified successfully! 🎉");
       } else if (res.status === "needs_review") {
         toast.info("Submitted for manual moderation review.");
@@ -239,6 +244,13 @@ export function PhotoVerificationModal({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md p-0 overflow-hidden bg-card border-border/80 shadow-2xl rounded-2xl">
+        {showConfetti && (
+          <FestiveConfetti
+            count={60}
+            durationMs={2600}
+            onComplete={() => setShowConfetti(false)}
+          />
+        )}
         {/* Header */}
         <div className="bg-gradient-to-br from-action/15 via-background to-card p-5 border-b border-border/60">
           <div className="flex items-center gap-2.5">

@@ -25,6 +25,8 @@ import {
   Share2,
 } from "lucide-react";
 import { toast } from "sonner";
+import { FestiveConfetti } from "@/components/festive-confetti";
+import { playDandiyaClackSound, playCelebrationChime } from "@/lib/sound-effects";
 
 export type MatchPartnerInfo = {
   id: string;
@@ -57,14 +59,22 @@ export function MatchCommunicationScreen({
   const [acting, setActing] = useState(false);
   const [copied, setCopied] = useState(false);
 
-  // Quick inline handle prompt if user doesn't have an IG handle yet
   const [promptHandle, setPromptHandle] = useState(false);
   const [inputHandle, setInputHandle] = useState("");
   const [savingHandle, setSavingHandle] = useState(false);
+  const [showConfetti, setShowConfetti] = useState(true);
+
+  // Play initial celebratory Dandiya Clack on mount
+  useEffect(() => {
+    playDandiyaClackSound();
+  }, []);
 
   const loadStatus = async () => {
     setLoading(true);
     const status = await getMatchInstagramStatus(partner.id);
+    if (status.bothConsented && status.partnerHandle && !exchange?.bothConsented) {
+      playCelebrationChime();
+    }
     setExchange(status);
     setLoading(false);
   };
@@ -143,6 +153,15 @@ export function MatchCommunicationScreen({
           : "w-full rounded-3xl border border-border/80 bg-card p-5 text-card-foreground shadow-sm"
       )}
     >
+      {/* Festive Confetti Burst for Match Milestone */}
+      {showConfetti && (
+        <FestiveConfetti
+          count={75}
+          durationMs={2800}
+          onComplete={() => setShowConfetti(false)}
+        />
+      )}
+
       {/* Container sizing */}
       <div className={cn("w-full", isFullscreen ? "max-w-md mx-auto" : "max-w-2xl mx-auto")}>
         {/* Close button for fullscreen modal */}

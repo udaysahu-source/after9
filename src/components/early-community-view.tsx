@@ -174,13 +174,16 @@ export function EarlyCommunityView({
         {/* Interactive 9-Night Selector Grid */}
         <div className="grid grid-cols-3 gap-2 sm:grid-cols-3">
           {NIGHTS.map((n) => {
-            const isGoing = userNights.includes(n.night);
-            const isSaving = savingNight === n.night;
+            const nightNum = (n as any).night ?? (n as any).n;
+            const isGoing = userNights.includes(nightNum);
+            const isSaving = savingNight === nightNum;
+            const themeLabel = typeof (n as any).theme === "string" ? (n as any).theme.split(" ")[0] : `Night ${nightNum}`;
+            const dateLabel = typeof (n as any).date === "string" ? (n as any).date.split(" ")[0] : String(nightNum);
             return (
               <button
-                key={n.night}
+                key={nightNum}
                 type="button"
-                onClick={() => toggleNight(n.night)}
+                onClick={() => toggleNight(nightNum)}
                 disabled={isSaving}
                 className={cn(
                   "touch-tactile relative flex flex-col items-center justify-center rounded-xl border p-2.5 text-center transition-all",
@@ -190,13 +193,13 @@ export function EarlyCommunityView({
                 )}
               >
                 <span className="text-[10px] font-black uppercase tracking-wider text-action">
-                  Night {n.night}
+                  Night {nightNum}
                 </span>
                 <span className="font-display text-xs font-extrabold text-foreground mt-0.5">
-                  {n.theme.split(" ")[0]}
+                  {themeLabel}
                 </span>
                 <span className="text-[10px] text-muted-foreground mt-0.5">
-                  {n.date.split(" ")[0]}
+                  {dateLabel}
                 </span>
                 {isGoing && (
                   <CheckCircle2 className="absolute top-1.5 right-1.5 h-3.5 w-3.5 text-action" />

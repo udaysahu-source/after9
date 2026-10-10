@@ -1,4 +1,5 @@
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate, Outlet, useMatch } from "@tanstack/react-router";
+import { useServerFn } from "@tanstack/react-start";
 import { useState, useEffect, useMemo } from "react";
 import {
   Calendar,
@@ -52,8 +53,16 @@ export const Route = createFileRoute("/_authenticated/plan")({
       { name: "twitter:card", content: "summary" },
     ],
   }),
-  component: PlanPage,
+  component: PlanRootWrapper,
 });
+
+function PlanRootWrapper() {
+  const isChild = useMatch({ from: "/_authenticated/plan/$id", shouldThrow: false });
+  if (isChild) {
+    return <Outlet />;
+  }
+  return <PlanPage />;
+}
 
 // Configured 2026 Navratri festival dates (9 Nights of Garba in Raipur)
 const FESTIVAL_DATES_2026: Array<{ iso: string; weekday: string; day: string; month: string; night: number }> = [
@@ -69,6 +78,14 @@ const FESTIVAL_DATES_2026: Array<{ iso: string; weekday: string; day: string; mo
 ];
 
 function PlanPage() {
+  const fetchPublicEvents = useServerFn(listPublicEvents);
+  const fetchSaved = useServerFn(listMySavedEvents);
+  const fetchGroupPlans = useServerFn(listMyGroupPlans);
+  const onToggleSave = useServerFn(toggleSaveEvent);
+  const onRespondGroupPlan = useServerFn(respondToGroupPlan);
+  const onSuggestEvent = useServerFn(submitEventSuggestion);
+  const onCreateGroupPlan = useServerFn(createGroupPlan);
+
   const [activeTab, setActiveTab] = useState<"discover" | "itinerary">("discover");
   const [city, setCity] = useState("Raipur");
   const [selectedDate, setSelectedDate] = useState<string | null>("2026-10-11");
@@ -94,16 +111,18 @@ function PlanPage() {
     setLoading(true);
     try {
       const [evList, savedList, plansList] = await Promise.all([
-        listPublicEvents({
-          city,
-          date: selectedDate ?? undefined,
-          query: searchQuery || undefined,
-          verifiedOnly: verifiedOnly || undefined,
-          maxBudget: under500Only ? 500 : undefined,
-          sortBy,
+        fetchPublicEvents({
+          data: {
+            city,
+            date: selectedDate ?? undefined,
+            query: searchQuery || undefined,
+            verifiedOnly: verifiedOnly || undefined,
+            maxBudget: under500Only ? 500 : undefined,
+            sortBy,
+          },
         }),
-        listMySavedEvents().catch(() => []),
-        listMyGroupPlans().catch(() => []),
+        fetchSaved().catch(() => []),
+        fetchGroupPlans().catch(() => []),
       ]);
 
       setEvents(evList);
@@ -146,7 +165,7 @@ function PlanPage() {
 
   const handleToggleSave = async (eventId: string) => {
     try {
-      const res = await toggleSaveEvent({ data: { eventId } });
+      const res = await onToggleSave({ data: { eventId } });
       setSavedIds((prev) => {
         const next = new Set(prev);
         if (res.saved) {
@@ -159,7 +178,7 @@ function PlanPage() {
         return next;
       });
       // Refresh saved list
-      const updated = await listMySavedEvents().catch(() => []);
+      const updated = await fetchSaved().catch(() => []);
       setSavedEvents(updated);
     } catch (err: any) {
       toast.error(err.message || "Failed to update saved event.");
@@ -443,7 +462,7 @@ function PlanPage() {
                         <button
                           type="button"
                           onClick={async () => {
-                            await respondToGroupPlan({ data: { planId: gp.id, response: "accepted" } });
+                            await onRespondGroupPlan({ data: { planId: gp.id, response: "accepted" } });
                             toast.success("Response recorded!");
                             loadData();
                           }}
@@ -454,7 +473,7 @@ function PlanPage() {
                         <button
                           type="button"
                           onClick={async () => {
-                            await respondToGroupPlan({ data: { planId: gp.id, response: "declined" } });
+                            await onRespondGroupPlan({ data: { planId: gp.id, response: "declined" } });
                             toast.success("Plan declined.");
                             loadData();
                           }}
@@ -510,7 +529,7 @@ function PlanPage() {
         open={suggestModalOpen}
         onOpenChange={setSuggestModalOpen}
         onSubmit={async (data) => {
-          await submitEventSuggestion({ data });
+          await onSuggestEvent({ data });
         }}
       />
 
@@ -520,7 +539,7 @@ function PlanPage() {
         event={targetEventForPlan}
         availableMatches={matches}
         onSubmit={async (data) => {
-          await createGroupPlan({ data });
+          await onCreateGroupPlan({ data });
           loadData();
         }}
       />

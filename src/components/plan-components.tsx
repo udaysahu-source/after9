@@ -753,7 +753,7 @@ export function formatEventDate(
   startIso: string | null | undefined,
   endIso?: string | null | undefined
 ): string {
-  if (!startIso) return "TBD";
+  if (!startIso || typeof startIso !== "string") return "TBD";
   try {
     const [sy, sm, sd] = startIso.split("-").map(Number);
     if (!sy || !sm || !sd) return startIso;
@@ -763,7 +763,7 @@ export function formatEventDate(
     const sMonth = sDate.toLocaleDateString("en-IN", { month: "short", timeZone: "UTC" });
     const sYear = sDate.getUTCFullYear();
 
-    if (!endIso || endIso === startIso) {
+    if (!endIso || typeof endIso !== "string" || endIso === startIso) {
       return `${sDay} ${sMonth} ${sYear}`;
     }
 

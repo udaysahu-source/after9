@@ -9,10 +9,27 @@ export type FeedRow = Database["public"]["Functions"]["discover_feed"]["Returns"
 // Festival config lives in code; the database only stores night numbers per user.
 export const FESTIVAL = { name: "Navratri", year: 2026, city: "Raipur", start: "2026-10-11" };
 
+export const NAVRATRI_THEMES = [
+  "Orange (Shailputri)",
+  "White (Brahmacharini)",
+  "Red (Chandraghanta)",
+  "Royal Blue (Kushmanda)",
+  "Yellow (Skandamata)",
+  "Green (Katyayani)",
+  "Grey (Kalaratri)",
+  "Purple (Mahagauri)",
+  "Peacock Green (Siddhidatri)",
+] as const;
+
 export const NIGHTS = Array.from({ length: 9 }, (_, i) => {
   const d = new Date(FESTIVAL.start);
   d.setDate(d.getDate() + i);
-  return { n: i + 1, date: d.toLocaleDateString("en-IN", { day: "numeric", month: "short" }) };
+  return {
+    n: i + 1,
+    night: i + 1,
+    date: d.toLocaleDateString("en-IN", { day: "numeric", month: "short" }),
+    theme: NAVRATRI_THEMES[i] || `Theme ${i + 1}`,
+  };
 });
 
 export const QUIZ = [

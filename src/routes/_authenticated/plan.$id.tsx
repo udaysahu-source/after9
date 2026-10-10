@@ -1,4 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { useServerFn } from "@tanstack/react-start";
 import { useState, useEffect } from "react";
 import {
   Calendar,
@@ -46,6 +47,11 @@ export const Route = createFileRoute("/_authenticated/plan/$id")({
 function EventDetailPage() {
   const { id } = Route.useParams();
   const nav = useNavigate();
+  const fetchEventDetail = useServerFn(getEventDetail);
+  const onToggleSave = useServerFn(toggleSaveEvent);
+  const onSetAttendance = useServerFn(setAttendanceInterest);
+  const onCreateGroupPlan = useServerFn(createGroupPlan);
+
   const [event, setEvent] = useState<PlanEventItem | null>(null);
   const [isSaved, setIsSaved] = useState(false);
   const [attendance, setAttendance] = useState<string | null>(null);
@@ -78,7 +84,7 @@ function EventDetailPage() {
   const fetchEvent = async (uid?: string) => {
     setLoading(true);
     try {
-      const res = await getEventDetail({
+      const res = await fetchEventDetail({
         data: { idOrSlug: id, userId: uid },
       });
       setEvent(res.event);
@@ -94,7 +100,7 @@ function EventDetailPage() {
   const handleToggleSave = async () => {
     if (!event) return;
     try {
-      const res = await toggleSaveEvent({ data: { eventId: event.id } });
+      const res = await onToggleSave({ data: { eventId: event.id } });
       setIsSaved(res.saved);
       toast.success(res.saved ? "Added to your Navratri itinerary!" : "Removed from itinerary.");
     } catch (err: any) {
@@ -124,7 +130,7 @@ function EventDetailPage() {
   const handleAttendanceChange = async (newStatus: "interested" | "going" | "none") => {
     if (!event) return;
     try {
-      await setAttendanceInterest({
+      await onSetAttendance({
         data: {
           eventId: event.id,
           status: newStatus,
@@ -530,7 +536,7 @@ function EventDetailPage() {
         event={event}
         availableMatches={matches}
         onSubmit={async (data) => {
-          await createGroupPlan({ data });
+          await onCreateGroupPlan({ data });
         }}
       />
 

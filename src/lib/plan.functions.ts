@@ -76,15 +76,21 @@ export const listPublicEvents = createServerFn({ method: "GET" })
   .validator((input?: {
     date?: string | undefined;
     city?: string | undefined;
+    area?: string | undefined;
     query?: string | undefined;
     verifiedOnly?: boolean | undefined;
+    freeOnly?: boolean | undefined;
+    hasBookingUrl?: boolean | undefined;
     maxBudget?: number | undefined;
     sortBy?: "time" | "price" | "name" | "date" | undefined;
   }) => ({
     date: input?.date ? String(input.date).trim() : undefined,
     city: input?.city ? String(input.city).trim() : "Raipur",
+    area: input?.area && input.area !== "all" ? String(input.area).trim().toLowerCase() : undefined,
     query: input?.query ? String(input.query).trim().toLowerCase() : undefined,
     verifiedOnly: Boolean(input?.verifiedOnly),
+    freeOnly: Boolean(input?.freeOnly),
+    hasBookingUrl: Boolean(input?.hasBookingUrl),
     maxBudget: input?.maxBudget ? Number(input.maxBudget) : undefined,
     sortBy: input?.sortBy ?? "time",
   }))
@@ -181,8 +187,26 @@ export const listPublicEvents = createServerFn({ method: "GET" })
       });
     }
 
-    // 3. Budget filter (only filters when confirmed prices exist)
-    if (data.maxBudget !== undefined && !isNaN(data.maxBudget)) {
+    // 3. Area / Locality filter
+    if (data.area) {
+      const a = data.area;
+      items = items.filter((ev) => {
+        return (
+          (ev.area && ev.area.toLowerCase().includes(a)) ||
+          (ev.venue && ev.venue.toLowerCase().includes(a)) ||
+          (ev.address && ev.address.toLowerCase().includes(a))
+        );
+      });
+    }
+
+    // 4. Free or budget filter
+    if (data.freeOnly) {
+      items = items.filter((ev) => {
+        if (ev.min_price_inr === 0) return true;
+        if (ev.entry_rules && ev.entry_rules.some((r) => r.toLowerCase().includes("free"))) return true;
+        return false;
+      });
+    } else if (data.maxBudget !== undefined && !isNaN(data.maxBudget)) {
       const mb = data.maxBudget;
       items = items.filter((ev) => {
         if (ev.min_price_inr !== null) {
@@ -190,6 +214,11 @@ export const listPublicEvents = createServerFn({ method: "GET" })
         }
         return true; // Keep unknown price events unless user explicitly excludes
       });
+    }
+
+    // 5. Official booking URL filter
+    if (data.hasBookingUrl) {
+      items = items.filter((ev) => ev.has_valid_booking_url);
     }
 
     // 4. Sorting

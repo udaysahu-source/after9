@@ -17,13 +17,13 @@ export interface AdminStatusResult {
  * which has full admin privileges via migration 0015 RLS policies.
  */
 async function getAdminDb(context: { supabase: any; userId: string; claims: any }) {
-  if (process.env["SUPABASE_SERVICE_ROLE_KEY"]) {
-    try {
-      const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  try {
+    const { supabaseAdmin, isServiceRoleConfigured } = await import("@/integrations/supabase/client.server");
+    if (isServiceRoleConfigured) {
       return supabaseAdmin;
-    } catch {
-      return context.supabase;
     }
+  } catch {
+    /* fallback */
   }
   return context.supabase;
 }

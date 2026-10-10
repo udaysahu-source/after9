@@ -29,11 +29,25 @@ function createSupabaseFetch(supabaseKey: string): typeof fetch {
   };
 }
 
-export const isServiceRoleConfigured = Boolean(process.env['SUPABASE_SERVICE_ROLE_KEY']);
+function isValidApiKey(val: string | undefined): boolean {
+  if (!val) return false;
+  const trimmed = val.trim();
+  if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) return false;
+  return trimmed.length > 20 && (trimmed.startsWith('sb_') || trimmed.startsWith('eyJ'));
+}
+
+export const isServiceRoleConfigured = Boolean(
+  process.env['SUPABASE_SERVICE_ROLE_KEY'] && isValidApiKey(process.env['SUPABASE_SERVICE_ROLE_KEY'])
+);
 
 function createSupabaseAdminClient() {
   const SUPABASE_URL = process.env['SUPABASE_URL'] || process.env['VITE_SUPABASE_URL'];
-  const SUPABASE_KEY = process.env['SUPABASE_SERVICE_ROLE_KEY'] || process.env['SUPABASE_PUBLISHABLE_KEY'] || process.env['VITE_SUPABASE_PUBLISHABLE_KEY'];
+  const rawServiceKey = process.env['SUPABASE_SERVICE_ROLE_KEY'];
+  const validServiceKey = isValidApiKey(rawServiceKey) ? rawServiceKey?.trim() : undefined;
+  const SUPABASE_KEY =
+    validServiceKey ||
+    process.env['SUPABASE_PUBLISHABLE_KEY'] ||
+    process.env['VITE_SUPABASE_PUBLISHABLE_KEY'];
 
   if (!SUPABASE_URL || !SUPABASE_KEY) {
     const missing = [
@@ -45,8 +59,8 @@ function createSupabaseAdminClient() {
     throw new Error(message);
   }
 
-  if (!process.env['SUPABASE_SERVICE_ROLE_KEY']) {
-    console.warn('[Supabase Server] SUPABASE_SERVICE_ROLE_KEY is not configured; running in fallback mode with publishable key.');
+  if (!validServiceKey) {
+    console.warn('[Supabase Server] SUPABASE_SERVICE_ROLE_KEY is not configured or invalid; running in fallback mode with publishable key.');
   }
 
   return createClient<Database>(SUPABASE_URL, SUPABASE_KEY, {

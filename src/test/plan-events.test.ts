@@ -133,6 +133,35 @@ describe("Plan Events - Search Matching Logic", () => {
     const results = searchEvents("Nonexistent Hall Mumbai");
     expect(results.length).toBe(0);
   });
+
+  it("filters events by specific locality / area accurately", () => {
+    const filterByArea = (area: string) =>
+      sampleEvents.filter(
+        (e) =>
+          e.area?.toLowerCase().includes(area.toLowerCase()) ||
+          e.venue.toLowerCase().includes(area.toLowerCase())
+      );
+
+    const vipRoad = filterByArea("VIP Road");
+    expect(vipRoad.length).toBe(1);
+    expect(vipRoad[0]?.venue).toContain("Neelam");
+
+    const avadhpuri = filterByArea("Avadhpuri");
+    expect(avadhpuri.length).toBe(1);
+    expect(avadhpuri[0]?.venue).toContain("Avadhpuri");
+  });
+
+  it("filters free entry vs ticketed Garba nights", () => {
+    const eventsWithPricing = [
+      { id: "free-night", min_price_inr: 0, rules: ["Free entry for traditional attire"] },
+      { id: "paid-pass", min_price_inr: 499, rules: ["Pass required"] },
+    ];
+    const freeEvents = eventsWithPricing.filter(
+      (e) => e.min_price_inr === 0 || e.rules.some((r) => r.toLowerCase().includes("free"))
+    );
+    expect(freeEvents.length).toBe(1);
+    expect(freeEvents[0]?.id).toBe("free-night");
+  });
 });
 
 describe("Plan Events - Group Planning Consensus Rules", () => {

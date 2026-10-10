@@ -77,6 +77,16 @@ const FESTIVAL_DATES_2026: Array<{ iso: string; weekday: string; day: string; mo
   { iso: "2026-10-19", weekday: "Mon", day: "19", month: "Oct", night: 9 },
 ];
 
+const RAIPUR_LOCALITIES = [
+  { id: "all", label: "All Raipur" },
+  { id: "vip road", label: "VIP Road" },
+  { id: "avadhpuri", label: "Avadhpuri" },
+  { id: "telibandha", label: "Telibandha" },
+  { id: "shankar nagar", label: "Shankar Nagar" },
+  { id: "naya raipur", label: "Naya Raipur" },
+  { id: "samta colony", label: "Samta Colony" },
+];
+
 function PlanPage() {
   const fetchPublicEvents = useServerFn(listPublicEvents);
   const fetchSaved = useServerFn(listMySavedEvents);
@@ -89,8 +99,12 @@ function PlanPage() {
   const [activeTab, setActiveTab] = useState<"discover" | "itinerary">("discover");
   const [city, setCity] = useState("Raipur");
   const [selectedDate, setSelectedDate] = useState<string | null>("2026-10-11");
+  const [selectedArea, setSelectedArea] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState("");
+  const [debouncedQuery, setDebouncedQuery] = useState("");
   const [verifiedOnly, setVerifiedOnly] = useState(false);
+  const [freeOnly, setFreeOnly] = useState(false);
+  const [hasTicketsOnly, setHasTicketsOnly] = useState(false);
   const [under500Only, setUnder500Only] = useState(false);
   const [sortBy, setSortBy] = useState<"time" | "price" | "name" | "date">("time");
 
@@ -106,6 +120,14 @@ function PlanPage() {
   const [targetEventForPlan, setTargetEventForPlan] = useState<PlanEventItem | null>(null);
   const [matches, setMatches] = useState<any[]>([]);
 
+  // Debounce search query to prevent stutter
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedQuery(searchQuery);
+    }, 220);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
   // Load events and user itinerary
   const loadData = async () => {
     setLoading(true);
@@ -114,9 +136,12 @@ function PlanPage() {
         fetchPublicEvents({
           data: {
             city,
+            area: selectedArea !== "all" ? selectedArea : undefined,
             date: selectedDate ?? undefined,
-            query: searchQuery || undefined,
+            query: debouncedQuery || undefined,
             verifiedOnly: verifiedOnly || undefined,
+            freeOnly: freeOnly || undefined,
+            hasBookingUrl: hasTicketsOnly || undefined,
             maxBudget: under500Only ? 500 : undefined,
             sortBy,
           },
@@ -139,7 +164,24 @@ function PlanPage() {
 
   useEffect(() => {
     loadData();
-  }, [city, selectedDate, searchQuery, verifiedOnly, under500Only, sortBy]);
+  }, [city, selectedDate, debouncedQuery, selectedArea, verifiedOnly, freeOnly, hasTicketsOnly, under500Only, sortBy]);
+
+  const activeFiltersCount =
+    (selectedArea !== "all" ? 1 : 0) +
+    (verifiedOnly ? 1 : 0) +
+    (freeOnly ? 1 : 0) +
+    (hasTicketsOnly ? 1 : 0) +
+    (under500Only ? 1 : 0) +
+    (debouncedQuery ? 1 : 0);
+
+  const clearAllFilters = () => {
+    setSelectedArea("all");
+    setVerifiedOnly(false);
+    setFreeOnly(false);
+    setHasTicketsOnly(false);
+    setUnder500Only(false);
+    setSearchQuery("");
+  };
 
   // Load user matches for group planning
   useEffect(() => {
@@ -279,68 +321,149 @@ function PlanPage() {
           </div>
 
           {/* 2. Search & filter bar */}
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
-            <div className="relative flex-1">
-              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search by venue (e.g. VIP Road, Avadhpuri, Royal Castle)..."
-                className="w-full rounded-2xl border border-border/80 bg-card pl-10 pr-4 py-2 text-xs md:text-sm outline-hidden focus:border-action shadow-2xs transition"
-              />
-              {searchQuery && (
-                <button
-                  type="button"
-                  onClick={() => setSearchQuery("")}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground text-xs"
-                >
-                  ✕
-                </button>
-              )}
-            </div>
-
-            {/* Filter chips */}
-            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar">
-              <button
-                type="button"
-                onClick={() => setVerifiedOnly(!verifiedOnly)}
-                className={cn(
-                  "inline-flex items-center gap-1 rounded-xl border px-3 py-2 text-xs font-semibold whitespace-nowrap transition active:scale-95",
-                  verifiedOnly
-                    ? "bg-teal-500 text-white border-teal-500 shadow-xs"
-                    : "bg-card border-border/80 text-muted-foreground hover:border-action/60"
+          <div className="space-y-2">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
+              <div className="relative flex-1">
+                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Search by venue (e.g. VIP Road, Avadhpuri, Royal Castle)..."
+                  className="w-full rounded-2xl border border-border/80 bg-card pl-10 pr-8 py-2 text-xs md:text-sm outline-hidden focus:border-action shadow-2xs transition"
+                />
+                {searchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setSearchQuery("")}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground text-xs p-1"
+                    aria-label="Clear search"
+                  >
+                    ✕
+                  </button>
                 )}
-              >
-                <ShieldCheck className="h-3.5 w-3.5" />
-                <span>Verified Only</span>
-              </button>
+              </div>
 
-              <button
-                type="button"
-                onClick={() => setUnder500Only(!under500Only)}
-                className={cn(
-                  "inline-flex items-center gap-1 rounded-xl border px-3 py-2 text-xs font-semibold whitespace-nowrap transition active:scale-95",
-                  under500Only
-                    ? "bg-action text-white border-action shadow-xs"
-                    : "bg-card border-border/80 text-muted-foreground hover:border-action/60"
-                )}
-              >
-                <span>Under ₹500</span>
-              </button>
-
+              {/* Sort dropdown */}
               <select
                 value={sortBy}
                 onChange={(e: any) => setSortBy(e.target.value)}
                 aria-label="Sort events"
-                className="rounded-xl border border-border/80 bg-card px-2.5 py-2 text-xs font-semibold text-foreground outline-hidden focus:border-action shadow-2xs"
+                className="rounded-2xl border border-border/80 bg-card px-3 py-2 text-xs font-semibold text-foreground outline-hidden focus:border-action shadow-2xs"
               >
-                <option value="time">Sort by Time</option>
-                <option value="price">Sort by Price</option>
-                <option value="name">Sort by Name</option>
-                <option value="date">Sort by Date</option>
+                <option value="time">Sort: Earliest Time</option>
+                <option value="price">Sort: Lowest Price</option>
+                <option value="name">Sort: A–Z Name</option>
+                <option value="date">Sort: Festival Date</option>
               </select>
             </div>
+
+            {/* Locality Selector Pills */}
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar">
+              <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider pl-1 shrink-0 flex items-center gap-1">
+                <MapPin className="h-3 w-3 text-action" /> Locality:
+              </span>
+              {RAIPUR_LOCALITIES.map((loc) => (
+                <button
+                  key={loc.id}
+                  type="button"
+                  onClick={() => setSelectedArea(loc.id)}
+                  className={cn(
+                    "rounded-xl px-2.5 py-1 text-xs font-semibold whitespace-nowrap transition active:scale-95 border",
+                    selectedArea === loc.id
+                      ? "bg-primary text-primary-foreground border-primary shadow-2xs font-bold"
+                      : "bg-card border-border/80 text-muted-foreground hover:text-foreground hover:border-action/60"
+                  )}
+                >
+                  {loc.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Filter chips & Clear */}
+            <div className="flex items-center justify-between gap-2 overflow-x-auto pb-1 no-scrollbar">
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setVerifiedOnly(!verifiedOnly)}
+                  className={cn(
+                    "inline-flex items-center gap-1 rounded-xl border px-2.5 py-1 text-xs font-semibold whitespace-nowrap transition active:scale-95",
+                    verifiedOnly
+                      ? "bg-teal-500 text-white border-teal-500 shadow-xs"
+                      : "bg-card border-border/80 text-muted-foreground hover:border-action/60"
+                  )}
+                >
+                  <ShieldCheck className="h-3.5 w-3.5" />
+                  <span>Verified Only</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setFreeOnly(!freeOnly)}
+                  className={cn(
+                    "inline-flex items-center gap-1 rounded-xl border px-2.5 py-1 text-xs font-semibold whitespace-nowrap transition active:scale-95",
+                    freeOnly
+                      ? "bg-emerald-600 text-white border-emerald-600 shadow-xs"
+                      : "bg-card border-border/80 text-muted-foreground hover:border-action/60"
+                  )}
+                >
+                  <Sparkles className="h-3.5 w-3.5" />
+                  <span>Free Entry</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setUnder500Only(!under500Only)}
+                  className={cn(
+                    "inline-flex items-center gap-1 rounded-xl border px-2.5 py-1 text-xs font-semibold whitespace-nowrap transition active:scale-95",
+                    under500Only
+                      ? "bg-action text-white border-action shadow-xs"
+                      : "bg-card border-border/80 text-muted-foreground hover:border-action/60"
+                  )}
+                >
+                  <span>Under ₹500</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setHasTicketsOnly(!hasTicketsOnly)}
+                  className={cn(
+                    "inline-flex items-center gap-1 rounded-xl border px-2.5 py-1 text-xs font-semibold whitespace-nowrap transition active:scale-95",
+                    hasTicketsOnly
+                      ? "bg-indigo-600 text-white border-indigo-600 shadow-xs"
+                      : "bg-card border-border/80 text-muted-foreground hover:border-action/60"
+                  )}
+                >
+                  <ExternalLink className="h-3 w-3" />
+                  <span>Passes Available</span>
+                </button>
+              </div>
+
+              {activeFiltersCount > 0 && (
+                <button
+                  type="button"
+                  onClick={clearAllFilters}
+                  className="rounded-xl border border-dashed border-border/80 px-2.5 py-1 text-xs font-bold text-muted-foreground hover:text-destructive hover:border-destructive/60 transition shrink-0"
+                >
+                  Reset ({activeFiltersCount})
+                </button>
+              )}
+            </div>
+
+            {/* Result count status */}
+            {!loading && (
+              <div className="flex items-center justify-between text-[11px] text-muted-foreground px-1 pt-0.5">
+                <span>
+                  Showing <strong className="text-foreground">{events.length}</strong> {events.length === 1 ? "Garba night" : "Garba nights"}
+                  {selectedArea !== "all" && <span> in <strong className="text-foreground">{selectedArea}</strong></span>}
+                </span>
+                {activeFiltersCount > 0 && (
+                  <span className="text-action font-semibold">
+                    {activeFiltersCount} {activeFiltersCount === 1 ? "filter active" : "filters active"}
+                  </span>
+                )}
+              </div>
+            )}
           </div>
 
           {/* 3. Event list */}
@@ -360,12 +483,7 @@ function PlanPage() {
               <div className="pt-2 flex flex-wrap items-center justify-center gap-2">
                 <button
                   type="button"
-                  onClick={() => {
-                    setSelectedDate(null);
-                    setSearchQuery("");
-                    setVerifiedOnly(false);
-                    setUnder500Only(false);
-                  }}
+                  onClick={clearAllFilters}
                   className="rounded-xl border border-border/80 bg-card px-4 py-2 text-xs font-bold text-foreground shadow-2xs hover:bg-muted"
                 >
                   Clear Filters

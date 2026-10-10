@@ -41,6 +41,7 @@ import {
   toggleAdminDiscoverLaunch,
   listAdminUsers,
   updateUserModeration,
+  deleteAdminUser,
   listAdminReports,
   resolveAdminReport,
   listAdminInvites,
@@ -83,6 +84,7 @@ function AdminDashboard() {
   const toggleLaunch = useServerFn(toggleAdminDiscoverLaunch);
   const listUsers = useServerFn(listAdminUsers);
   const updateModeration = useServerFn(updateUserModeration);
+  const deleteUser = useServerFn(deleteAdminUser);
   const getReports = useServerFn(listAdminReports);
   const resolveReport = useServerFn(resolveAdminReport);
   const getInvites = useServerFn(listAdminInvites);
@@ -132,7 +134,7 @@ function AdminDashboard() {
     [...userList.map((u) => u.photo_path), inspectUser?.photo_path].filter(Boolean)
   );
   const [actionReason, setActionReason] = useState("");
-  const [confirmModal, setConfirmModal] = useState<{ action: "suspend" | "reactivate" | "approve" | "reject"; user: any } | null>(null);
+  const [confirmModal, setConfirmModal] = useState<{ action: "suspend" | "reactivate" | "approve" | "reject" | "delete"; user: any } | null>(null);
 
   // State for moderation reports
   const [reports, setReports] = useState<any[]>([]);
@@ -634,14 +636,24 @@ function AdminDashboard() {
   const handleUserAction = async () => {
     if (!confirmModal) return;
     try {
-      await updateModeration({
-        data: {
-          userId: confirmModal.user.id,
-          action: confirmModal.action,
-          reason: actionReason || undefined,
-        },
-      });
-      toast.success(`User successfully updated: ${confirmModal.action}`);
+      if (confirmModal.action === "delete") {
+        await deleteUser({
+          data: {
+            userId: confirmModal.user.id,
+            reason: actionReason || undefined,
+          },
+        });
+        toast.success(`User successfully deleted`);
+      } else {
+        await updateModeration({
+          data: {
+            userId: confirmModal.user.id,
+            action: confirmModal.action,
+            reason: actionReason || undefined,
+          },
+        });
+        toast.success(`User successfully updated: ${confirmModal.action}`);
+      }
       setConfirmModal(null);
       setActionReason("");
       loadTabData();
@@ -1779,6 +1791,14 @@ function AdminDashboard() {
                                 Reject
                               </button>
                             )}
+                            <button
+                              type="button"
+                              onClick={() => setConfirmModal({ action: "delete", user: u })}
+                              className="rounded-lg border border-destructive/30 bg-destructive/10 p-1 text-destructive hover:bg-destructive/20 transition"
+                              title="Delete User Account"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
                           </div>
                         </td>
                       </tr>
@@ -2778,10 +2798,12 @@ function AdminDashboard() {
           <DialogContent className="max-w-md border-border/80 bg-background/98 p-6 shadow-2xl rounded-2xl">
             <DialogHeader className="space-y-2">
               <DialogTitle className="font-display text-lg font-extrabold text-primary capitalize">
-                Confirm {confirmModal.action}: {confirmModal.user.first_name}
+                Confirm {confirmModal.action}: {confirmModal.user.first_name || "User"}
               </DialogTitle>
               <DialogDescription className="text-xs text-muted-foreground">
-                This action will be permanently recorded in the security audit log.
+                {confirmModal.action === "delete"
+                  ? "Warning: This action permanently deletes this user profile and all associated interactions. This cannot be undone."
+                  : "This action will be permanently recorded in the security audit log."}
               </DialogDescription>
             </DialogHeader>
 
@@ -2809,7 +2831,7 @@ function AdminDashboard() {
                   type="button"
                   onClick={handleUserAction}
                   className={`rounded-xl px-4 py-2 text-xs font-bold text-white transition hover:opacity-90 ${
-                    confirmModal.action === "suspend" || confirmModal.action === "reject"
+                    confirmModal.action === "suspend" || confirmModal.action === "reject" || confirmModal.action === "delete"
                       ? "bg-destructive hover:bg-destructive/90"
                       : "bg-teal-600 hover:bg-teal-700"
                   }`}
@@ -3082,20 +3104,38 @@ function AdminDashboard() {
                 </div>
               </div>
 
-              <div className="flex items-center justify-end gap-2 pt-3">
-                <button
-                  type="button"
-                  onClick={() => setEventModalOpen(false)}
-                  className="rounded-xl border border-border px-3.5 py-2 font-semibold text-muted-foreground hover:bg-muted"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="rounded-xl bg-primary px-4 py-2 font-bold text-primary-foreground hover:opacity-90"
-                >
-                  Save Listing
-                </button>
+              <div className="flex items-center justify-between gap-2 pt-3">
+                {editingEvent?.id ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const evToDelete = editingEvent;
+                      setEventModalOpen(false);
+                      setDeleteEventModal(evToDelete);
+                    }}
+                    className="inline-flex items-center gap-1.5 rounded-xl border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs font-bold text-destructive hover:bg-destructive/20"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                    <span>Delete Event</span>
+                  </button>
+                ) : (
+                  <div />
+                )}
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setEventModalOpen(false)}
+                    className="rounded-xl border border-border px-3.5 py-2 text-xs font-semibold text-muted-foreground hover:bg-muted"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="rounded-xl bg-primary px-4 py-2 text-xs font-bold text-primary-foreground hover:opacity-90"
+                  >
+                    Save Listing
+                  </button>
+                </div>
               </div>
             </form>
           </DialogContent>
@@ -3333,8 +3373,9 @@ function AdminDashboard() {
                     <button
                       type="button"
                       onClick={() => {
+                        const target = inspectUser;
                         setInspectUser(null);
-                        setConfirmModal({ action: "reactivate", user: inspectUser });
+                        setConfirmModal({ action: "reactivate", user: target });
                       }}
                       className="rounded-xl border border-teal-500/40 bg-teal-500/10 px-3 py-1.5 text-xs font-bold text-teal-600 hover:bg-teal-500/20"
                     >
@@ -3344,14 +3385,28 @@ function AdminDashboard() {
                     <button
                       type="button"
                       onClick={() => {
+                        const target = inspectUser;
                         setInspectUser(null);
-                        setConfirmModal({ action: "suspend", user: inspectUser });
+                        setConfirmModal({ action: "suspend", user: target });
                       }}
                       className="rounded-xl border border-destructive/40 bg-destructive/10 px-3 py-1.5 text-xs font-bold text-destructive hover:bg-destructive/20"
                     >
                       Suspend Account
                     </button>
                   )}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const target = inspectUser;
+                      setInspectUser(null);
+                      setConfirmModal({ action: "delete", user: target });
+                    }}
+                    className="inline-flex items-center gap-1.5 rounded-xl border border-destructive/40 bg-destructive/10 px-3 py-1.5 text-xs font-bold text-destructive hover:bg-destructive/20"
+                    title="Permanently Delete User"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                    <span>Delete User</span>
+                  </button>
                 </div>
 
                 <div className="flex items-center gap-2">

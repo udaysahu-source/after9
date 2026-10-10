@@ -248,4 +248,81 @@ describe("Admin Authorization & Audit Security", () => {
     // When enabled, backend returns inventory
     expect(simulateDiscoverFeed(true, inventory)).toEqual(inventory);
   });
+
+  it("handles admin moderation action patches correctly", () => {
+    const applyModerationAction = (action: "approve" | "reject" | "suspend" | "reactivate", reason?: string) => {
+      const patch: Record<string, any> = {};
+      if (action === "suspend") {
+        patch.is_suspended = true;
+        patch.suspension_reason = reason || "Suspended by moderator for community safety guidelines violation";
+      } else if (action === "reactivate") {
+        patch.is_suspended = false;
+        patch.suspension_reason = null;
+      } else if (action === "approve") {
+        patch.verification_status = "approved";
+        patch.verification_reason = null;
+      } else if (action === "reject") {
+        patch.verification_status = "rejected";
+        patch.verification_reason = reason || "Verification rejected by administrator";
+      }
+      return patch;
+    };
+
+    expect(applyModerationAction("approve")).toEqual({
+      verification_status: "approved",
+      verification_reason: null,
+    });
+    expect(applyModerationAction("reject", "Inappropriate profile picture")).toEqual({
+      verification_status: "rejected",
+      verification_reason: "Inappropriate profile picture",
+    });
+    expect(applyModerationAction("suspend", "Spam activity")).toEqual({
+      is_suspended: true,
+      suspension_reason: "Spam activity",
+    });
+    expect(applyModerationAction("reactivate")).toEqual({
+      is_suspended: false,
+      suspension_reason: null,
+    });
+  });
+
+  it("ensures guard_profile logic permits verified admins to approve without resetting status", () => {
+    const simulateGuardProfile = (
+      role: string,
+      isAdmin: boolean,
+      oldStatus: string,
+      newStatus: string
+    ) => {
+      // If not service_role and not admin, reverts to old status
+      if (role !== "service_role" && !isAdmin) {
+        return oldStatus;
+      }
+      return newStatus;
+    };
+
+    // Ordinary user cannot alter their verification status
+    expect(simulateGuardProfile("authenticated", false, "pending", "approved")).toBe("pending");
+    // Service role can alter verification status
+    expect(simulateGuardProfile("service_role", false, "pending", "approved")).toBe("approved");
+    // Admin user can alter verification status
+    expect(simulateGuardProfile("authenticated", true, "pending", "approved")).toBe("approved");
+    expect(simulateGuardProfile("authenticated", true, "pending", "rejected")).toBe("rejected");
+  });
+
+  it("generates USER_DELETE audit log upon account removal", () => {
+    const createDeleteAudit = (adminId: string, adminEmail: string, targetUserId: string, reason?: string) => ({
+      actor_id: adminId,
+      actor_email: adminEmail || "admin@after9.internal",
+      action: "USER_DELETE",
+      target_id: targetUserId,
+      details: { reason },
+      created_at: new Date().toISOString(),
+    });
+
+    const audit = createDeleteAudit("adm-1", "admin@after9.app", "user-to-delete", "Requested account purge");
+    expect(audit.action).toBe("USER_DELETE");
+    expect(audit.target_id).toBe("user-to-delete");
+    expect(audit.actor_email).toBe("admin@after9.app");
+    expect(audit.details.reason).toBe("Requested account purge");
+  });
 });

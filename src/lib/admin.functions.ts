@@ -127,7 +127,7 @@ export const checkAdminStatus = createServerFn({ method: "GET" })
  * Server middleware helper that asserts admin status before executing privileged functions.
  */
 async function assertAdminCaller(userId: string, userEmail?: string | null, callerSupabase?: any) {
-  const email = (userEmail ?? "").toLowerCase();
+  let email = (userEmail ?? "").toLowerCase();
 
   // 1. Check RPC if authenticated client is available
   if (callerSupabase) {
@@ -136,10 +136,13 @@ async function assertAdminCaller(userId: string, userEmail?: string | null, call
       if (isAdm) {
         const { data: record } = await callerSupabase
           .from("admin_users")
-          .select("role")
+          .select("role, email")
           .eq("user_id", userId)
           .maybeSingle();
-        return { email, role: record?.role ?? "admin" };
+        if (!email && record?.email) {
+          email = record.email.toLowerCase();
+        }
+        return { email: email || "admin@after9.internal", role: record?.role ?? "admin" };
       }
     } catch {
       // RPC error fallback
@@ -354,6 +357,20 @@ export const updateUserModeration = createServerFn({ method: "POST" })
     const admin = await assertAdminCaller(context.userId, context.claims?.email, context.supabase);
     const db = await getAdminDb(context);
 
+    // 1. Try dedicated security definer RPC
+    try {
+      const { data: rpcRes, error: rpcErr } = await db.rpc("admin_moderate_user", {
+        p_user_id: data.userId,
+        p_action: data.action,
+        p_reason: data.reason ?? null,
+      });
+      if (!rpcErr && rpcRes) {
+        return { ok: true };
+      }
+    } catch {
+      // Fall through to direct table update
+    }
+
     type ProfileUpdate = Database["public"]["Tables"]["profiles"]["Update"];
     const patch: ProfileUpdate = {};
 
@@ -385,6 +402,46 @@ export const updateUserModeration = createServerFn({ method: "POST" })
       action: `USER_${data.action.toUpperCase()}`,
       target_id: data.userId,
       details: { reason: data.reason, patch },
+    });
+
+    return { ok: true };
+  });
+
+/**
+ * Permanently delete a user profile and clean up associated records (admin privileged).
+ */
+export const deleteAdminUser = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: { userId: string; reason?: string | undefined }) => ({
+    userId: String(d.userId).trim(),
+    reason: d.reason ? String(d.reason).trim().slice(0, 500) : undefined,
+  }))
+  .handler(async ({ data, context }) => {
+    const admin = await assertAdminCaller(context.userId, context.claims?.email, context.supabase);
+    const db = await getAdminDb(context);
+
+    // Clean up auxiliary references in event tables where user_id references auth.users
+    try {
+      await db.from("saved_events").delete().eq("user_id", data.userId);
+      await db.from("event_attendance_interests").delete().eq("user_id", data.userId);
+      await db.from("group_plan_participants").delete().eq("user_id", data.userId);
+      await db.from("group_plans").delete().eq("creator_id", data.userId);
+      await db.from("event_suggestions").delete().eq("user_id", data.userId);
+    } catch (e) {
+      console.warn("[Admin] Aux user cleanup note:", e);
+    }
+
+    // Delete user profile (foreign keys CASCADE automatically in postgres)
+    const { error } = await db.from("profiles").delete().eq("id", data.userId);
+    if (error) throw error;
+
+    // Record in audit log
+    await db.from("admin_audit_logs").insert({
+      actor_id: context.userId,
+      actor_email: admin.email,
+      action: "USER_DELETE",
+      target_id: data.userId,
+      details: { reason: data.reason },
     });
 
     return { ok: true };

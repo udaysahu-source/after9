@@ -114,19 +114,19 @@ describe("Plan Events - Search Matching Logic", () => {
   it("finds events matching by venue name", () => {
     const results = searchEvents("Avadhpuri");
     expect(results.length).toBe(1);
-    expect(results[0].id).toBe("rajdhani");
+    expect(results[0]?.id).toBe("rajdhani");
   });
 
   it("finds events matching by area / locality", () => {
     const results = searchEvents("VIP Road");
     expect(results.length).toBe(1);
-    expect(results[0].id).toBe("maa-aarna");
+    expect(results[0]?.id).toBe("maa-aarna");
   });
 
   it("finds events matching by organizer", () => {
     const results = searchEvents("Rotary Club");
     expect(results.length).toBe(1);
-    expect(results[0].id).toBe("neon-raas");
+    expect(results[0]?.id).toBe("neon-raas");
   });
 
   it("returns empty result on non-existent search term", () => {
@@ -165,7 +165,9 @@ describe("Plan Events - Group Planning Consensus Rules", () => {
     expect(computeGroupPlanStatus(participants)).toBe("awaiting_responses");
 
     // Once friend1 explicitly accepts, plan becomes confirmed
-    participants[1].status = "accepted";
+    if (participants[1]) {
+      participants[1].status = "accepted";
+    }
     expect(computeGroupPlanStatus(participants)).toBe("confirmed");
   });
 

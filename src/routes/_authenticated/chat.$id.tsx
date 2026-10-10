@@ -1,4 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { useServerFn } from "@tanstack/react-start";
 import { useEffect, useRef, useState } from "react";
 import { ChatIcon, Dandiya, Shell } from "@/components/after9";
 import { supabase } from "@/integrations/supabase/client";
@@ -30,6 +31,8 @@ export const Route = createFileRoute("/_authenticated/chat/$id")({
 function Chat() {
   const { id } = Route.useParams();
   const nav = useNavigate();
+  const fetchEvents = useServerFn(listPublicEvents);
+  const onCreatePlan = useServerFn(createGroupPlan);
   const [me, setMe] = useState<string>("");
   const [other, setOther] = useState<Match | null | undefined>(undefined);
   const [msgs, setMsgs] = useState<Msg[]>([]);
@@ -78,7 +81,7 @@ function Chat() {
   const loadEventsForPicker = async () => {
     setPlanPickerOpen(true);
     if (eventsList.length === 0) {
-      const evs = await listPublicEvents({ city: "Raipur" }).catch(() => []);
+      const evs = await fetchEvents({ data: { city: "Raipur" } }).catch(() => []);
       setEventsList(evs);
       if (evs.length > 0) {
         setSelectedEv(evs[0]!);
@@ -128,7 +131,7 @@ function Chat() {
 
   const handleAcceptPlan = async (parsedPlan: any) => {
     try {
-      await createGroupPlan({
+      await onCreatePlan({
         data: {
           eventId: parsedPlan.eventId,
           planDate: parsedPlan.date,

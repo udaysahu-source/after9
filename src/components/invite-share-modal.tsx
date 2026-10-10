@@ -184,7 +184,7 @@ export function InviteShareModal({
                 </p>
               </div>
 
-              {activeCode && status !== "error" && (
+              {activeCode && (
                 <div className="flex items-center justify-between px-2">
                   <span className="text-xs text-muted-foreground">Code:</span>
                   <span className="font-mono text-base font-extrabold tracking-wider text-action">

@@ -36,7 +36,7 @@ export const checkAdminStatus = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }): Promise<AdminStatusResult> => {
     const { userId, claims, supabase } = context;
-    const email = (claims?.email ? String(claims.email) : null)?.toLowerCase();
+    const email = (claims?.email ? String(claims.email) : null)?.toLowerCase() ?? null;
     const serviceRoleConfigured = Boolean(process.env["SUPABASE_SERVICE_ROLE_KEY"]);
 
     // 1. Verify via database is_admin RPC (security definer)
@@ -65,8 +65,8 @@ export const checkAdminStatus = createServerFn({ method: "GET" })
       return {
         isAdmin: true,
         role: adminRecord.role as any,
-        email,
-        userId,
+        email: email ?? null,
+        userId: userId ?? null,
         serviceRoleConfigured,
       };
     }
@@ -117,8 +117,8 @@ export const checkAdminStatus = createServerFn({ method: "GET" })
     return {
       isAdmin: false,
       role: null,
-      email,
-      userId,
+      email: email ?? null,
+      userId: userId ?? null,
       serviceRoleConfigured,
     };
   });
@@ -245,8 +245,8 @@ export const getAdminOverviewMetrics = createServerFn({ method: "GET" })
     const { data: sends } = await db.from("dandiyas").select("from_id, to_id").eq("kind", "send");
     let mutualMatches = 0;
     if (sends) {
-      const sendSet = new Set(sends.map((s) => `${s.from_id}:${s.to_id}`));
-      for (const s of sends) {
+      const sendSet = new Set((sends as any[]).map((s: any) => `${s.from_id}:${s.to_id}`));
+      for (const s of (sends as any[])) {
         if (s.from_id < s.to_id && sendSet.has(`${s.to_id}:${s.from_id}`)) {
           mutualMatches++;
         }
@@ -398,8 +398,8 @@ export const listAdminReports = createServerFn({ method: "GET" })
 
     const userIds = [
       ...new Set([
-        ...(reports ?? []).map((r) => r.blocker_id),
-        ...(reports ?? []).map((r) => r.blocked_id),
+        ...((reports as any[]) ?? []).map((r: any) => r.blocker_id),
+        ...((reports as any[]) ?? []).map((r: any) => r.blocked_id),
       ]),
     ];
 
@@ -407,9 +407,9 @@ export const listAdminReports = createServerFn({ method: "GET" })
       ? await db.from("profiles").select("id, first_name, photo_path, college").in("id", userIds)
       : { data: [] };
 
-    const profMap = new Map((profiles ?? []).map((p) => [p.id, p]));
+    const profMap = new Map(((profiles as any[]) ?? []).map((p: any) => [p.id, p]));
 
-    return (reports ?? []).map((r) => ({
+    return ((reports as any[]) ?? []).map((r: any) => ({
       ...r,
       blocker: profMap.get(r.blocker_id) ?? null,
       blocked: profMap.get(r.blocked_id) ?? null,
@@ -474,8 +474,8 @@ export const listAdminInvites = createServerFn({ method: "GET" })
 
     const userIds = [
       ...new Set([
-        ...(invites ?? []).map((i) => i.creator_id),
-        ...(invites ?? []).map((i) => i.claimed_by).filter(Boolean) as string[],
+        ...((invites as any[]) ?? []).map((i: any) => i.creator_id),
+        ...((invites as any[]) ?? []).map((i: any) => i.claimed_by).filter(Boolean) as string[],
       ]),
     ];
 
@@ -483,9 +483,9 @@ export const listAdminInvites = createServerFn({ method: "GET" })
       ? await db.from("profiles").select("id, first_name, college, onboarded, discoverable, verification_status, created_at").in("id", userIds)
       : { data: [] };
 
-    const profMap = new Map((profiles ?? []).map((p) => [p.id, p]));
+    const profMap = new Map(((profiles as any[]) ?? []).map((p: any) => [p.id, p]));
 
-    return (invites ?? []).map((i) => ({
+    return ((invites as any[]) ?? []).map((i: any) => ({
       ...i,
       creator: profMap.get(i.creator_id) ?? null,
       claimed_by_user: i.claimed_by ? profMap.get(i.claimed_by) ?? null : null,
@@ -903,7 +903,7 @@ export const toggleAdminDiscoverLaunch = createServerFn({ method: "POST" })
 
         if (allUsers && allUsers.length > 0) {
           const now = new Date().toISOString();
-          const notifs = allUsers.map((u) => ({
+          const notifs = (allUsers as any[]).map((u: any) => ({
             user_id: u.id,
             type: "system" as const,
             title: "🎉 Discover Deck is Now Live!",

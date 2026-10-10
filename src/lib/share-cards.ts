@@ -757,8 +757,8 @@ export async function renderInviteStoryCard(
   options: {
     code: string;
     url: string;
-    senderName?: string | null;
-    photoUrl?: string | null;
+    senderName?: string | null | undefined;
+    photoUrl?: string | null | undefined;
   }
 ): Promise<void> {
   await loadFonts();
@@ -899,7 +899,7 @@ export async function renderInviteStoryCard(
 export async function drawInviteCard(
   code: string,
   url: string,
-  extra?: { senderName?: string | null; photoUrl?: string | null }
+  extra?: { senderName?: string | null | undefined; photoUrl?: string | null | undefined }
 ): Promise<"shared" | "downloaded"> {
   const canvas = document.createElement("canvas");
   await renderInviteStoryCard(canvas, {

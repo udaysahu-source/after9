@@ -118,14 +118,18 @@ export const claimInvite = createServerFn({ method: "POST" })
     }
 
     // Record server-side attribution
-    await supabaseAdmin.from("referral_attributions").upsert(
-      {
-        referrer_id: inv.creator_id,
-        referee_id: userId,
-        code: inv.code,
-      },
-      { onConflict: "referee_id" }
-    ).catch(() => {});
+    try {
+      await (supabaseAdmin as any).from("referral_attributions").upsert(
+        {
+          referrer_id: inv.creator_id,
+          referee_id: userId,
+          code: inv.code,
+        },
+        { onConflict: "referee_id" }
+      );
+    } catch {
+      /* ignore conflict */
+    }
 
     // Set invited_by on the referee's profile
     await supabaseAdmin.from("profiles").update({ invited_by: inv.creator_id }).eq("id", userId);

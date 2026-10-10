@@ -179,7 +179,7 @@ export async function recordSecurityEvent(params: {
       severity: params.severity ?? "info",
       actor_id: params.actorId ?? null,
       ip_hash: ipHash,
-      metadata: params.metadata ?? {},
+      metadata: (params.metadata ?? {}) as any,
     });
   } catch (err) {
     console.warn("[Security] Failed to write security event:", err);

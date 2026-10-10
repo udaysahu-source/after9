@@ -962,6 +962,14 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      set_profile_verification_verdict: {
+        Args: {
+          p_user_id: string
+          p_status: string
+          p_reason?: string | null
+        }
+        Returns: undefined
+      }
       ensure_my_invites: {
         Args: Record<PropertyKey, never>
         Returns: Json

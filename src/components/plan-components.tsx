@@ -355,9 +355,9 @@ export function SuggestEventModal({
     city: string;
     dates: string;
     venue: string;
-    organizer?: string;
-    sourceLink?: string;
-    notes?: string;
+    organizer?: string | undefined;
+    sourceLink?: string | undefined;
+    notes?: string | undefined;
   }) => Promise<void>;
 }) {
   const [name, setName] = useState("");
@@ -554,9 +554,9 @@ export function CreateGroupPlanModal({
   onSubmit: (data: {
     eventId: string;
     planDate: string;
-    proposedTime?: string;
-    meetingPoint?: string;
-    notes?: string;
+    proposedTime?: string | undefined;
+    meetingPoint?: string | undefined;
+    notes?: string | undefined;
     invitedUserIds: string[];
   }) => Promise<void>;
 }) {

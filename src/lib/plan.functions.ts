@@ -62,6 +62,8 @@ export interface PlanEventItem {
   booking_url: string | null;
   has_valid_booking_url: boolean;
   price_source: string | null;
+  source_notes: string | null;
+  source_url: string | null;
   verification_status: string;
   publication_status: string;
   is_saved?: boolean;
@@ -147,6 +149,8 @@ export const listPublicEvents = createServerFn({ method: "GET" })
         booking_url: r.booking_url,
         has_valid_booking_url: isSafeHttpsUrl(r.booking_url),
         price_source: r.price_source,
+        source_notes: r.source_notes ?? null,
+        source_url: r.source_url ?? null,
         verification_status: r.verification_status,
         publication_status: r.publication_status,
       };
@@ -271,10 +275,10 @@ export const getEventDetail = createServerFn({ method: "GET" })
         organizer: row.organizer,
         poster_url: row.poster_url,
         themes_count: row.themes_count,
-        highlights: Array.isArray(row.highlights) ? row.highlights : [],
+        highlights: Array.isArray(row.highlights) ? row.highlights.map(String) : [],
         additional_programs: Array.isArray(row.additional_programs) ? row.additional_programs : [],
         contact_verified: row.contact_verified,
-        entry_rules: Array.isArray(row.entry_rules) ? row.entry_rules : [],
+        entry_rules: Array.isArray(row.entry_rules) ? row.entry_rules.map(String) : [],
         pass_categories: Array.isArray(row.pass_categories) ? row.pass_categories : [],
         min_price_inr: row.min_price_inr !== null ? Number(row.min_price_inr) : null,
         max_price_inr: row.max_price_inr !== null ? Number(row.max_price_inr) : null,
@@ -282,6 +286,8 @@ export const getEventDetail = createServerFn({ method: "GET" })
         booking_url: row.booking_url,
         has_valid_booking_url: isSafeHttpsUrl(row.booking_url),
         price_source: row.price_source,
+        source_notes: row.source_notes ?? null,
+        source_url: row.source_url ?? null,
         verification_status: row.verification_status,
         publication_status: row.publication_status,
       },
@@ -370,10 +376,10 @@ export const listMySavedEvents = createServerFn({ method: "GET" })
             organizer: ev.organizer,
             poster_url: ev.poster_url,
             themes_count: ev.themes_count,
-            highlights: Array.isArray(ev.highlights) ? ev.highlights : [],
+            highlights: Array.isArray(ev.highlights) ? ev.highlights.map(String) : [],
             additional_programs: Array.isArray(ev.additional_programs) ? ev.additional_programs : [],
             contact_verified: ev.contact_verified,
-            entry_rules: Array.isArray(ev.entry_rules) ? ev.entry_rules : [],
+            entry_rules: Array.isArray(ev.entry_rules) ? ev.entry_rules.map(String) : [],
             pass_categories: Array.isArray(ev.pass_categories) ? ev.pass_categories : [],
             min_price_inr: ev.min_price_inr !== null ? Number(ev.min_price_inr) : null,
             max_price_inr: ev.max_price_inr !== null ? Number(ev.max_price_inr) : null,
@@ -381,6 +387,8 @@ export const listMySavedEvents = createServerFn({ method: "GET" })
             booking_url: ev.booking_url,
             has_valid_booking_url: isSafeHttpsUrl(ev.booking_url),
             price_source: ev.price_source,
+            source_notes: ev.source_notes ?? null,
+            source_url: ev.source_url ?? null,
             verification_status: ev.verification_status,
             publication_status: ev.publication_status,
             is_saved: true,

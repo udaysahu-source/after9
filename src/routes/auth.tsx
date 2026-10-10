@@ -31,6 +31,16 @@ function Auth() {
   const [showResend, setShowResend] = useState(false);
   const [failCount, setFailCount] = useState(0);
   const [cooldownSeconds, setCooldownSeconds] = useState(0);
+  const [invite, setInvite] = useState<string | null>(null);
+
+  useEffect(() => {
+    try {
+      const code = typeof window !== "undefined" ? localStorage.getItem("after9.invite") : null;
+      if (code) setInvite(code);
+    } catch {
+      /* ignore storage read error */
+    }
+  }, []);
 
   useEffect(() => {
     if (cooldownSeconds <= 0) return;
@@ -51,7 +61,7 @@ function Auth() {
         p_event_type: "bot_decoy_triggered",
         p_severity: "critical",
         p_metadata: { form: "auth_submit", mode },
-      }).catch(() => {});
+      }).then(() => {}, () => {});
       return setMsg("Invalid submission detected.");
     }
 
@@ -113,7 +123,7 @@ function Auth() {
               p_event_type: "repeated_auth_failures",
               p_severity: "warn",
               p_metadata: { failures: nextFail },
-            }).catch(() => {});
+            }).then(() => {}, () => {});
           }
 
           if (error.message.toLowerCase().includes("invalid login credentials")) {

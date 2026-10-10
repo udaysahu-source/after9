@@ -20,6 +20,8 @@ import {
 import { cn } from "@/lib/utils";
 import { InviteShareModal } from "@/components/invite-share-modal";
 import { ShareCardStudio } from "@/components/share-card-studio";
+import { ReportUserModal } from "@/components/report-user-modal";
+import { PhotoVerificationModal } from "@/components/photo-verification-modal";
 import type { CardCustomization } from "@/lib/share-cards";
 import { getMySocialLinks, type SocialLinkRow } from "@/lib/social-links";
 import {
@@ -34,6 +36,7 @@ import { EarlyCommunityView } from "@/components/early-community-view";
 import { MatchCommunicationScreen } from "@/components/match-communication-screen";
 import { FestiveConfetti } from "@/components/festive-confetti";
 import { playDandiyaClackSound, playCelebrationChime } from "@/lib/sound-effects";
+import { Camera, ShieldAlert } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/discover")({
   head: () => ({
@@ -64,6 +67,8 @@ function Discover() {
   const [hidden, setHidden] = useState<boolean | null>(null);
   const [inviteModalOpen, setInviteModalOpen] = useState(false);
   const [shareStudioOpen, setShareStudioOpen] = useState(false);
+  const [reportTarget, setReportTarget] = useState<FeedRow | null>(null);
+  const [verifyModalOpen, setVerifyModalOpen] = useState(false);
   const [socials, setSocials] = useState<SocialLinkRow[]>([]);
   const [launchControl, setLaunchControl] = useState<any>(null);
   const [isAdmin, setIsAdmin] = useState(false);
@@ -293,6 +298,14 @@ function Discover() {
       .from("blocks")
       .insert({ blocker_id: me.id, blocked_id: t.id, reason: "hidden", report: false });
     setNote(`Hidden. ${t.first_name} won't see your name, college or photo.`);
+  };
+
+  const handleReportComplete = () => {
+    if (!reportTarget) return;
+    const t = reportTarget;
+    setFeed((f) => (f ?? []).filter((x) => x.id !== t.id));
+    setReportTarget(null);
+    setNote(`Report received. ${t.first_name} has been immediately blocked from your feed and chat.`);
   };
 
   useEffect(() => {
@@ -597,6 +610,7 @@ function Discover() {
                   onSwipe={act}
                   onChat={() => act("send", true)}
                   onHide={hideFrom}
+                  onReport={() => setReportTarget(top)}
                 />
               </div>
 
@@ -650,22 +664,51 @@ function Discover() {
                 onAct={act}
                 onChat={() => act("send", true)}
                 onHide={hideFrom}
+                onReport={() => setReportTarget(top)}
               />
             </div>
           </div>
         </>
         ) : (
-          <DiscoveryStateView
-            state={discoveryState === "normal" ? "zero_users" : discoveryState}
-            selectedNight={night}
-            diagnostics={diagnostics}
-            userProfile={me}
-            onClearNight={() => selectNight(null)}
-            onOpenInvite={() => setInviteModalOpen(true)}
-            onOpenShareCard={() => setShareStudioOpen(true)}
-            onRetry={loadDiscoveryData}
-            onExpandFilters={handleQuickExpandFilters}
-          />
+          <div className="space-y-4">
+            {me && me.verification_status !== "approved" && (
+              <div className="rounded-2xl border border-action/40 bg-action/10 p-5 text-center space-y-3">
+                <div className="flex items-center justify-center gap-2 text-action font-display font-bold text-base">
+                  <Camera className="h-5 w-5" />
+                  <span>
+                    {me.verification_status === "pending" || me.verification_status === "needs_review"
+                      ? "Selfie Verification Under Review"
+                      : me.verification_status === "rejected"
+                      ? "Photo Verification Incomplete"
+                      : "Live Camera Verification Required"}
+                  </span>
+                </div>
+                <p className="text-xs text-muted-foreground max-w-sm mx-auto">
+                  {me.verification_status === "pending" || me.verification_status === "needs_review"
+                    ? "Our team is reviewing your live camera selfie. Dancers must be verified before viewing candidates on the floor."
+                    : me.verification_reason || "To prevent fake accounts, stolen photos and bots, After9 requires dancers to complete a quick live camera verification."}
+                </p>
+                <div className="pt-1">
+                  <Btn size="sm" onClick={() => setVerifyModalOpen(true)}>
+                    {me.verification_status === "pending" || me.verification_status === "needs_review"
+                      ? "View Verification Status"
+                      : "Verify with Live Camera"}
+                  </Btn>
+                </div>
+              </div>
+            )}
+            <DiscoveryStateView
+              state={discoveryState === "normal" ? "zero_users" : discoveryState}
+              selectedNight={night}
+              diagnostics={diagnostics}
+              userProfile={me}
+              onClearNight={() => selectNight(null)}
+              onOpenInvite={() => setInviteModalOpen(true)}
+              onOpenShareCard={() => setShareStudioOpen(true)}
+              onRetry={loadDiscoveryData}
+              onExpandFilters={handleQuickExpandFilters}
+            />
+          </div>
         )}
       </main>
       </>
@@ -709,6 +752,26 @@ function Discover() {
           userId={me.id}
         />
       )}
+
+      {reportTarget && (
+        <ReportUserModal
+          open={Boolean(reportTarget)}
+          onOpenChange={(op) => !op && setReportTarget(null)}
+          targetUser={{ id: reportTarget.id, first_name: reportTarget.first_name, photo_path: reportTarget.photo_path }}
+          onReportComplete={handleReportComplete}
+        />
+      )}
+
+      {me && (
+        <PhotoVerificationModal
+          open={verifyModalOpen}
+          onOpenChange={setVerifyModalOpen}
+          profilePhotoUrl={me.photo_path ? (myPhotoUrls[me.photo_path] ?? null) : null}
+          onVerificationComplete={async () => {
+            await loadDiscoveryData();
+          }}
+        />
+      )}
     </Shell>
   );
 }
@@ -747,6 +810,7 @@ function FloorDossier({
   onAct,
   onChat,
   onHide,
+  onReport,
 }: {
   p: FeedRow;
   me: ProfileRow | null;
@@ -754,6 +818,7 @@ function FloorDossier({
   onAct: (d: "send" | "pass") => void;
   onChat: () => void;
   onHide: () => void;
+  onReport?: () => void;
 }) {
   const vibeScore = me ? vibe(me.quiz, me.nights, p) : 0;
   const sharedNights = me ? shared(me.nights, p.nights) : [];
@@ -905,13 +970,24 @@ function FloorDossier({
             <span>Direct Chat (Space)</span>
           </button>
         </div>
-        <button
-          type="button"
-          onClick={onHide}
-          className="text-center text-[11px] text-muted-foreground hover:text-destructive transition py-1"
-        >
-          Hide my profile from {p.first_name}
-        </button>
+        <div className="flex items-center justify-between px-1 text-[11px] py-1">
+          <button
+            type="button"
+            onClick={onHide}
+            className="text-muted-foreground hover:text-foreground transition"
+          >
+            Hide my profile
+          </button>
+          {onReport && (
+            <button
+              type="button"
+              onClick={onReport}
+              className="text-destructive/80 hover:text-destructive font-semibold transition"
+            >
+              Report & Block
+            </button>
+          )}
+        </div>
       </div>
     </aside>
   );
@@ -926,6 +1002,7 @@ function Card({
   onSwipe,
   onChat,
   onHide,
+  onReport,
 }: {
   p: FeedRow;
   url?: string | undefined;
@@ -935,6 +1012,7 @@ function Card({
   onSwipe: (d: "send" | "pass") => void;
   onChat: () => void;
   onHide: () => void;
+  onReport?: () => void;
 }) {
   const [dx, setDx] = useState(0);
   const [drag, setDrag] = useState(false);
@@ -1025,6 +1103,15 @@ function Card({
           >
             Hide me
           </button>
+          {onReport && (
+            <button
+              onClick={onReport}
+              aria-label={`Report and block ${p.first_name}`}
+              className="touch-tactile rounded-full bg-destructive/15 px-3 py-1.5 text-xs font-semibold text-destructive shadow-xs backdrop-blur-xs transition hover:bg-destructive/25"
+            >
+              Report
+            </button>
+          )}
         </div>
 
         {/* PASS Stamp with Pop Animation */}

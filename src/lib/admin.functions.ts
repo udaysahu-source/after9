@@ -435,6 +435,21 @@ export const deleteAdminUser = createServerFn({ method: "POST" })
     const { error } = await db.from("profiles").delete().eq("id", data.userId);
     if (error) throw error;
 
+    // Prune stored photos and private verification evidence for privacy & data minimization
+    try {
+      const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+      const { data: photoFiles } = await supabaseAdmin.storage.from("photos").list(data.userId);
+      if (photoFiles?.length) {
+        await supabaseAdmin.storage.from("photos").remove(photoFiles.map((f) => `${data.userId}/${f.name}`));
+      }
+      const { data: evidenceFiles } = await supabaseAdmin.storage.from("verification_evidence").list(data.userId);
+      if (evidenceFiles?.length) {
+        await supabaseAdmin.storage.from("verification_evidence").remove(evidenceFiles.map((f) => `${data.userId}/${f.name}`));
+      }
+    } catch (cleanErr) {
+      console.warn("[Admin] Storage files purge notice:", cleanErr);
+    }
+
     // Record in audit log
     await db.from("admin_audit_logs").insert({
       actor_id: context.userId,
@@ -521,6 +536,65 @@ export const resolveAdminReport = createServerFn({ method: "POST" })
     });
 
     return { ok: true };
+  });
+
+/**
+ * Retrieve reported chat messages under audited authorization.
+ * Only permitted when an explicit report exists between the two users.
+ */
+export const getAdminReportedMessages = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: { blockerId: string; blockedId: string }) => ({
+    blockerId: String(d.blockerId),
+    blockedId: String(d.blockedId),
+  }))
+  .handler(async ({ data, context }) => {
+    await assertAdminCaller(context.userId, context.claims?.email, context.supabase);
+    const db = await getAdminDb(context);
+
+    // Call audited security definer RPC
+    const { data: messages, error } = await db.rpc("admin_get_reported_messages", {
+      p_blocker_id: data.blockerId,
+      p_blocked_id: data.blockedId,
+    });
+
+    if (error) throw error;
+    return (messages as any[]) ?? [];
+  });
+
+/**
+ * Retrieve short-lived signed URL for verification evidence selfie.
+ * Restricted strictly to active administrators for manual review.
+ */
+export const getAdminVerificationEvidence = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: { userId: string }) => ({
+    userId: String(d.userId),
+  }))
+  .handler(async ({ data, context }) => {
+    await assertAdminCaller(context.userId, context.claims?.email, context.supabase);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+
+    // List evidence files under user's folder
+    const { data: files, error: listErr } = await supabaseAdmin.storage
+      .from("verification_evidence")
+      .list(data.userId, { limit: 5, sortBy: { column: "created_at", order: "desc" } });
+
+    if (listErr || !files || files.length === 0) {
+      return { evidenceUrl: null };
+    }
+
+    const latest = files[0];
+    const path = `${data.userId}/${latest.name}`;
+    const { data: signed, error: signErr } = await supabaseAdmin.storage
+      .from("verification_evidence")
+      .createSignedUrl(path, 300); // 5 minutes validity
+
+    if (signErr || !signed) {
+      return { evidenceUrl: null };
+    }
+
+    return { evidenceUrl: signed.signedUrl, filename: latest.name };
   });
 
 /**

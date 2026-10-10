@@ -58,6 +58,8 @@ import {
   getAdminAuditLogs,
   getAdminSecurityOverview,
   getAdminDiscoveryBalanceMetrics,
+  getAdminReportedMessages,
+  getAdminVerificationEvidence,
   type AdminStatusResult,
   type DiscoveryBalanceMetricsResult,
 } from "@/lib/admin.functions";
@@ -101,6 +103,8 @@ function AdminDashboard() {
   const getAuditLogs = useServerFn(getAdminAuditLogs);
   const getSecurityOverview = useServerFn(getAdminSecurityOverview);
   const getBalanceMetrics = useServerFn(getAdminDiscoveryBalanceMetrics);
+  const getReportedMessages = useServerFn(getAdminReportedMessages);
+  const getVerificationEvidence = useServerFn(getAdminVerificationEvidence);
 
   const [authStatus, setAuthStatus] = useState<AdminStatusResult | null>(null);
   const [loadingAuth, setLoadingAuth] = useState(true);
@@ -136,12 +140,26 @@ function AdminDashboard() {
   const [actionReason, setActionReason] = useState("");
   const [confirmModal, setConfirmModal] = useState<{ action: "suspend" | "reactivate" | "approve" | "reject" | "delete"; user: any } | null>(null);
 
-  // State for moderation reports
+  // State for verification evidence inspection
+  const [verificationEvidence, setVerificationEvidence] = useState<{
+    evidenceUrl: string | null;
+    captureType: string | null;
+    capturedAt: string | null;
+    loading: boolean;
+  } | null>(null);
+
+  // State for moderation reports & audited chat inspection
   const [reports, setReports] = useState<any[]>([]);
   const [reportsLoading, setReportsLoading] = useState(false);
   const [modNote, setModNote] = useState("");
   const [selectedReport, setSelectedReport] = useState<any>(null);
   const [resolveReportModal, setResolveReportModal] = useState<{ report: any; status: "resolved" | "dismissed" } | null>(null);
+  const [inspectedChat, setInspectedChat] = useState<{
+    blocker: any;
+    blocked: any;
+    messages: any[];
+    loading: boolean;
+  } | null>(null);
 
   // State for invites
   const [invites, setInvites] = useState<any[]>([]);
@@ -226,6 +244,26 @@ function AdminDashboard() {
   useEffect(() => {
     refreshAuth();
   }, [refreshAuth]);
+
+  useEffect(() => {
+    if (inspectUser?.id) {
+      setVerificationEvidence({ evidenceUrl: null, captureType: null, capturedAt: null, loading: true });
+      getVerificationEvidence({ data: { userId: inspectUser.id } })
+        .then((res) => {
+          setVerificationEvidence({
+            evidenceUrl: res?.evidenceUrl ?? null,
+            captureType: res?.captureType ?? null,
+            capturedAt: res?.capturedAt ?? null,
+            loading: false,
+          });
+        })
+        .catch(() => {
+          setVerificationEvidence({ evidenceUrl: null, captureType: null, capturedAt: null, loading: false });
+        });
+    } else {
+      setVerificationEvidence(null);
+    }
+  }, [inspectUser?.id, getVerificationEvidence]);
 
   // Handle Admin Direct Sign In
   const handleAdminSignIn = async (e: React.FormEvent) => {
@@ -1858,6 +1896,25 @@ function AdminDashboard() {
                       </div>
 
                       <div className="flex flex-wrap items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            setInspectedChat({ blocker: rep.blocker, blocked: rep.blocked, messages: [], loading: true });
+                            try {
+                              const res = await getReportedMessages({
+                                data: { blockerId: rep.blocker_id, blockedId: rep.blocked_id },
+                              });
+                              setInspectedChat({ blocker: rep.blocker, blocked: rep.blocked, messages: res.messages, loading: false });
+                            } catch (err: any) {
+                              toast.error(err.message || "Failed to load reported chat messages");
+                              setInspectedChat(null);
+                            }
+                          }}
+                          className="inline-flex items-center gap-1 rounded-lg border border-border bg-card px-2.5 py-1.5 text-xs font-bold text-foreground hover:bg-muted transition"
+                        >
+                          <Activity className="h-3.5 w-3.5 text-action" />
+                          Inspect Reported Chat
+                        </button>
                         {rep.blocked && (
                           <button
                             type="button"
@@ -3316,6 +3373,61 @@ function AdminDashboard() {
                 )}
               </div>
 
+              {/* Trust & Safety: Verification Evidence Comparison */}
+              <div className="rounded-xl border border-border/80 bg-card p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <ShieldCheck className="h-4 w-4 text-action" />
+                    <h4 className="font-display text-xs font-bold uppercase tracking-wider text-primary">
+                      Live Photo Verification Evidence
+                    </h4>
+                  </div>
+                  <span className="text-[11px] font-mono font-bold text-muted-foreground">
+                    Status: {inspectUser.verification_status}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3 pt-1">
+                  <div className="space-y-1.5 text-center">
+                    <p className="text-[11px] font-bold text-muted-foreground">Profile Photo</p>
+                    <div className="aspect-[3/4] w-full rounded-xl bg-muted overflow-hidden border border-border flex items-center justify-center">
+                      {inspectUser.photo_path && adminPhotoUrls[inspectUser.photo_path] ? (
+                        <img src={adminPhotoUrls[inspectUser.photo_path]} alt="Profile" className="h-full w-full object-cover" />
+                      ) : (
+                        <span className="text-xs text-muted-foreground">No Profile Photo</span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5 text-center">
+                    <p className="text-[11px] font-bold text-action">Live Camera Selfie</p>
+                    <div className="aspect-[3/4] w-full rounded-xl bg-muted overflow-hidden border border-border flex items-center justify-center">
+                      {verificationEvidence?.loading ? (
+                        <RefreshCw className="h-4 w-4 animate-spin text-muted-foreground" />
+                      ) : verificationEvidence?.evidenceUrl ? (
+                        <img src={verificationEvidence.evidenceUrl} alt="Live Selfie Evidence" className="h-full w-full object-cover" />
+                      ) : (
+                        <div className="p-2 text-[10px] text-muted-foreground">
+                          No live camera evidence on file
+                        </div>
+                      )}
+                    </div>
+                    {verificationEvidence?.capturedAt && (
+                      <p className="text-[10px] text-muted-foreground font-mono">
+                        Captured: {new Date(verificationEvidence.capturedAt).toLocaleTimeString()} ({verificationEvidence.captureType})
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                {inspectUser.verification_reason && (
+                  <p className="text-xs text-muted-foreground bg-muted/40 p-2.5 rounded-lg border border-border/60">
+                    <span className="font-semibold text-foreground">Verification Note: </span>
+                    {inspectUser.verification_reason}
+                  </p>
+                )}
+              </div>
+
               {/* Bio / Prompt Response */}
               {inspectUser.prompt_answer && (
                 <div className="rounded-xl border border-border/70 bg-card p-3.5 space-y-1">
@@ -3577,6 +3689,78 @@ function AdminDashboard() {
                   }`}
                 >
                   Confirm {resolveReportModal.status === "resolved" ? "Resolution" : "Dismissal"}
+                </button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {/* Audited Reported Chat Inspector Modal */}
+      {inspectedChat && (
+        <Dialog open={true} onOpenChange={() => setInspectedChat(null)}>
+          <DialogContent className="max-w-xl max-h-[85vh] overflow-y-auto border-border/80 bg-background/98 p-6 shadow-2xl rounded-2xl">
+            <DialogHeader className="space-y-1">
+              <div className="flex items-center justify-between">
+                <DialogTitle className="font-display text-lg font-extrabold text-primary">
+                  Reported Conversation Evidence
+                </DialogTitle>
+                <span className="rounded-full bg-amber-500/15 px-2.5 py-0.5 text-[10px] font-bold text-amber-600">
+                  Audited Inspection
+                </span>
+              </div>
+              <DialogDescription className="text-xs text-muted-foreground">
+                Displaying messages between {inspectedChat.blocker?.first_name || "Reporter"} and {inspectedChat.blocked?.first_name || "Reported User"}.
+                This query was recorded with administrative justification in the audit log.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-3 pt-3">
+              {inspectedChat.loading ? (
+                <div className="flex items-center justify-center py-8">
+                  <RefreshCw className="h-5 w-5 animate-spin text-action" />
+                </div>
+              ) : inspectedChat.messages.length === 0 ? (
+                <div className="rounded-xl border border-border/80 bg-muted/20 p-6 text-center text-xs text-muted-foreground">
+                  No chat messages found between these accounts.
+                </div>
+              ) : (
+                <div className="space-y-2 max-h-[400px] overflow-y-auto p-1">
+                  {inspectedChat.messages.map((m: any) => {
+                    const isBlocker = m.sender_id === inspectedChat.blocker?.id;
+                    return (
+                      <div
+                        key={m.id}
+                        className={`rounded-xl p-3 text-xs space-y-1 border ${
+                          isBlocker
+                            ? "bg-card border-border/70 mr-8"
+                            : "bg-destructive/10 border-destructive/30 ml-8 text-destructive"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between font-bold text-[10px]">
+                          <span>
+                            {isBlocker
+                              ? inspectedChat.blocker?.first_name || "Reporter"
+                              : inspectedChat.blocked?.first_name || "Target"}
+                          </span>
+                          <span className="text-muted-foreground font-normal">
+                            {new Date(m.created_at).toLocaleTimeString()}
+                          </span>
+                        </div>
+                        <p className="text-foreground text-xs leading-relaxed">{m.content}</p>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              <div className="flex items-center justify-end pt-3 border-t border-border/60">
+                <button
+                  type="button"
+                  onClick={() => setInspectedChat(null)}
+                  className="rounded-xl bg-card border border-border px-4 py-2 text-xs font-semibold text-foreground hover:bg-muted"
+                >
+                  Close Inspection
                 </button>
               </div>
             </div>

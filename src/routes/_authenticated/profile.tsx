@@ -52,6 +52,7 @@ import {
 } from "lucide-react";
 import { ShareCardStudio } from "@/components/share-card-studio";
 import { PhotoVerificationModal } from "@/components/photo-verification-modal";
+import { SuspensionAppealModal } from "@/components/suspension-appeal-modal";
 import { SocialLinksManager } from "@/components/social-links-manager";
 import { ProfileInstagramField } from "@/components/profile-instagram-field";
 import { ProfileVisibilityMeter } from "@/components/profile-visibility-meter";
@@ -128,6 +129,7 @@ function Profile() {
   const [checking, setChecking] = useState(false);
   const [cardStudioOpen, setCardStudioOpen] = useState(false);
   const [photoVerificationOpen, setPhotoVerificationOpen] = useState(false);
+  const [appealModalOpen, setAppealModalOpen] = useState(false);
   const [socials, setSocials] = useState<SocialLinkRow[]>([]);
   const urls = usePhotoUrls([p?.photo_path]);
 
@@ -292,6 +294,30 @@ function Profile() {
         <div className="mt-5 md:mt-8 md:grid md:grid-cols-12 md:gap-8 md:px-5">
           {/* LEFT COLUMN: Overview Card & Category Nav */}
           <div className={cn("flex flex-col gap-5 md:col-span-5", activeCategory !== null && "hidden md:flex")}>
+            {/* Account Suspension & Restriction Notice */}
+            {p.is_suspended && (
+              <div className="mx-5 md:mx-0 rounded-2xl border border-destructive/50 bg-destructive/10 p-4 space-y-2.5 shadow-xs">
+                <div className="flex items-start gap-2.5">
+                  <AlertTriangle className="h-5 w-5 text-destructive shrink-0 mt-0.5" />
+                  <div className="min-w-0 flex-1">
+                    <h3 className="font-display text-sm font-bold text-destructive">Account Restricted / Suspended</h3>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      {p.suspension_reason || "Your profile was suspended due to a safety or authenticity violation."}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center justify-end pt-1">
+                  <button
+                    type="button"
+                    onClick={() => setAppealModalOpen(true)}
+                    className="inline-flex items-center gap-1.5 rounded-xl bg-destructive px-3 py-1.5 text-xs font-bold text-white shadow-xs transition hover:bg-destructive/90 active:scale-98"
+                  >
+                    Submit Appeal
+                  </button>
+                </div>
+              </div>
+            )}
+
             {/* Clean Profile Overview (Displaying only the required 6 elements) */}
             <div className="mx-5 md:mx-0 overflow-hidden rounded-2xl border border-border/80 bg-card p-5 shadow-xs space-y-4">
               <div className="flex items-center gap-4">
@@ -581,6 +607,13 @@ function Profile() {
         onVerificationComplete={async () => {
           await reload();
         }}
+      />
+
+      {/* Account Suspension Appeal Modal */}
+      <SuspensionAppealModal
+        open={appealModalOpen}
+        onOpenChange={setAppealModalOpen}
+        suspensionReason={p.suspension_reason}
       />
     </Shell>
   );

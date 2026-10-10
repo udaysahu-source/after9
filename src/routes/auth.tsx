@@ -1,9 +1,11 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { useServerFn } from "@tanstack/react-start";
 import { useEffect, useState } from "react";
 import { Btn, Shell, AppIcon } from "@/components/after9";
 import { supabase } from "@/integrations/supabase/client";
 import { lovable } from "@/integrations/lovable/index";
 import { isDisposableEmail } from "@/lib/disposable-domains";
+import { checkSignupRateLimit } from "@/lib/verify.functions";
 import { Mail, KeyRound, ArrowLeft, ShieldAlert, Sparkles, RefreshCw } from "lucide-react";
 
 export const Route = createFileRoute("/auth")({
@@ -24,6 +26,7 @@ const input = "h-14 w-full border-b-2 border-border bg-transparent text-lg outli
 
 function Auth() {
   const nav = useNavigate();
+  const checkSignupLimit = useServerFn(checkSignupRateLimit);
   const [mode, setMode] = useState<"signup" | "signin" | "recovery" | "verify_otp">("signup");
   const [email, setEmail] = useState("");
   const [pw, setPw] = useState("");
@@ -125,6 +128,13 @@ function Auth() {
       }
 
       if (mode === "signup") {
+        try {
+          await checkSignupLimit();
+        } catch (rlErr: any) {
+          setBusy(false);
+          return setMsg(rlErr.message || "Too many signup attempts. Please try again later.");
+        }
+
         if (isDisposableEmail(email)) {
           setBusy(false);
           return setMsg("Temporary or disposable email domains are blocked to minimize fake users and protect safety. Please use your personal email (such as Gmail, Outlook, or your college address).");

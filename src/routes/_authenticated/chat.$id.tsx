@@ -10,6 +10,7 @@ import { cn } from "@/lib/utils";
 import { CalendarDays, ExternalLink, ShieldCheck, Sparkles, X, Check } from "lucide-react";
 import { toast } from "sonner";
 import { MatchCommunicationScreen } from "@/components/match-communication-screen";
+import { ReportUserModal } from "@/components/report-user-modal";
 import type { Database } from "@/integrations/supabase/types";
 
 type Msg = Database["public"]["Tables"]["messages"]["Row"];
@@ -39,6 +40,7 @@ function Chat() {
   const [msgs, setMsgs] = useState<Msg[]>([]);
   const [t, setT] = useState("");
   const [menu, setMenu] = useState(false);
+  const [reportModalOpen, setReportModalOpen] = useState(false);
 
   // Garba Plan Suggestion Modal state
   const [planPickerOpen, setPlanPickerOpen] = useState(false);
@@ -155,8 +157,13 @@ function Chat() {
   };
 
   const block = async (report: boolean) => {
-    const reason = report ? prompt("What happened? (optional)") ?? "" : null;
-    await supabase.from("blocks").insert({ blocker_id: me, blocked_id: id, report, reason });
+    setMenu(false);
+    if (report) {
+      setReportModalOpen(true);
+      return;
+    }
+    await supabase.from("blocks").insert({ blocker_id: me, blocked_id: id, report: false, reason: "unmatched" });
+    toast.success("User blocked and removed from matches.");
     nav({ to: "/matches" });
   };
 
@@ -394,6 +401,17 @@ function Chat() {
           <button className="touch-tactile h-12 shrink-0 rounded-full bg-action px-6 text-sm font-semibold text-action-foreground shadow-xs transition-transform active:scale-95">Send</button>
         </form>
       </div>
+
+      {other && (
+        <ReportUserModal
+          open={reportModalOpen}
+          onOpenChange={setReportModalOpen}
+          targetUserId={id}
+          targetUserName={other.first_name}
+          currentUserId={me}
+          onCompleted={() => nav({ to: "/matches" })}
+        />
+      )}
     </Shell>
   );
 }

@@ -1,10 +1,23 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import crypto from "node:crypto";
 
 import { validateBirthDate } from "./after9";
 import { INSTRUCTIONS, SCHEMA, toVerdict, type Raw, type Verdict } from "./verify-rules";
 import { assertRateLimit } from "./security-rate-limiter";
 
+/**
+ * Calculates SHA-256 hash of a buffer or Uint8Array.
+ */
+export function computeImageSha256(bytes: Uint8Array | Buffer): string {
+  return crypto.createHash("sha256").update(bytes).digest("hex");
+}
+
+/**
+ * Validates and verifies standard profile upload.
+ * Strictly verifies 18+ adult age, path validity, and checks for duplicate photo abuse.
+ * Never auto-approves solely because an invite code was used or API key is absent.
+ */
 export const verifyProfile = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }): Promise<Verdict & { status: string }> => {
@@ -20,7 +33,7 @@ export const verifyProfile = createServerFn({ method: "POST" })
 
     const { data: p } = await supabase
       .from("profiles")
-      .select("first_name, prompt, photo_path, invited_by, birth_date, is_suspended")
+      .select("first_name, prompt, photo_path, invited_by, birth_date, is_suspended, verification_status")
       .eq("id", userId)
       .single();
 
@@ -48,27 +61,72 @@ export const verifyProfile = createServerFn({ method: "POST" })
       return { approved: false, reason: "Invalid photo format or path.", status: "rejected" };
     }
 
-    if (p.invited_by) {
-      // Invited by a live member: skip the AI photo check only if age is verified 18+.
-      const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-      const reason = "Joined with a friend's invite — you're live on Discover.";
-      await supabaseAdmin.from("profiles").update({ verification_status: "approved", verification_reason: reason }).eq("id", userId);
-      return { approved: true, reason, status: "approved" };
-    }
+    // Download photo and compute hash
     const { data: blob } = await supabase.storage.from("photos").download(safePath);
     if (!blob) throw new Error("Could not read photo");
     const bytes = new Uint8Array(await blob.arrayBuffer());
+    const photoHash = computeImageSha256(bytes);
+
+    // 2. Duplicate Photo Impersonation Check:
+    // Check if an existing account has registered this identical photo hash
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data: existingRegistrations } = await supabaseAdmin
+      .from("security_events")
+      .select("actor_id, metadata")
+      .eq("event_type", "profile_photo_registered")
+      .contains("metadata", { photo_hash: photoHash })
+      .neq("actor_id", userId)
+      .limit(1);
+
+    if (existingRegistrations && existingRegistrations.length > 0) {
+      const existingActor = existingRegistrations[0].actor_id;
+      // Record flag without immediately banning (protect legitimate users sharing photos or festival groups)
+      await supabaseAdmin.from("security_events").insert({
+        event_type: "duplicate_photo_detected",
+        severity: "warn",
+        actor_id: userId,
+        metadata: {
+          photo_hash: photoHash,
+          original_user_id: existingActor,
+          duplicate_user_id: userId,
+          flagged_for_review: true,
+        },
+      });
+
+      const duplicateReason = "Duplicate profile photo detected across accounts — queued for moderator review to prevent impersonation.";
+      await supabaseAdmin.from("profiles").update({
+        verification_status: "needs_review",
+        verification_reason: duplicateReason,
+      }).eq("id", userId);
+
+      return { approved: false, reason: duplicateReason, status: "needs_review" };
+    }
+
+    // Register this photo hash for future collision tracking
+    await supabaseAdmin.from("security_events").insert({
+      event_type: "profile_photo_registered",
+      severity: "info",
+      actor_id: userId,
+      metadata: { photo_hash: photoHash, photo_path: safePath },
+    });
+
     let bin = "";
     for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
     const dataUrl = `data:${blob.type || "image/jpeg"};base64,${btoa(bin)}`;
 
     const key = process.env["LOVABLE_API_KEY"];
     if (!key) {
-      const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-      const reason = "Profile verified — you're live on Discover.";
-      await supabaseAdmin.from("profiles").update({ verification_status: "approved", verification_reason: reason }).eq("id", userId);
-      return { approved: true, reason, status: "approved" };
+      // Truthful fallback: never mark verified solely because a photo was uploaded.
+      // Queue for manual admin review.
+      const reviewReason = "Profile check submitted for manual administrator review. You will be verified shortly.";
+      await supabaseAdmin.from("profiles").update({
+        verification_status: "needs_review",
+        verification_reason: reviewReason,
+      }).eq("id", userId);
+
+      return { approved: false, reason: reviewReason, status: "needs_review" };
     }
+
     const res = await fetch("https://ai.gateway.lovable.dev/v1/responses", {
       method: "POST",
       headers: { "Content-Type": "application/json", "Lovable-API-Key": key, "X-Lovable-AIG-SDK": "fetch" },
@@ -117,28 +175,19 @@ export const verifyProfile = createServerFn({ method: "POST" })
       return { approved: false, reason: "We couldn't check your profile yet. Try again.", status: "pending" };
     }
     const status = v.approved ? "approved" : "rejected";
-    try {
-      await supabase.rpc("set_profile_verification_verdict", {
-        p_user_id: userId,
-        p_status: status,
-        p_reason: v.reason,
-      });
-    } catch {
-      const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-      await supabaseAdmin.from("profiles").update({ verification_status: status, verification_reason: v.reason }).eq("id", userId);
-    }
+    await supabaseAdmin.from("profiles").update({ verification_status: status, verification_reason: v.reason }).eq("id", userId);
     return { ...v, status };
   });
 
 /**
- * Responsible live photo verification with camera comparison.
- * Compares ephemeral live selfie with uploaded profile photo.
- * Falls back to manual review queue if automated provider is unconfigured.
- * Never stores biometric templates or permanent capture files.
+ * Responsible live photo verification with camera capture comparison.
+ * Requires fresh live camera evidence, rejects static/gallery photos,
+ * stores verification evidence in a private bucket accessible only to authorized reviewers,
+ * and falls back to manual moderation queue if automated evaluation is inconclusive or unconfigured.
  */
 export const submitLivePhotoVerification = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d: { liveSelfieDataUrl: string }) => {
+  .inputValidator((d: { liveSelfieDataUrl: string; capturedAt?: number; captureType?: string }) => {
     const raw = String(d.liveSelfieDataUrl ?? "").trim();
     if (!raw.startsWith("data:image/") || !raw.includes(";base64,")) {
       throw new Error("Invalid image format provided.");
@@ -147,12 +196,16 @@ export const submitLivePhotoVerification = createServerFn({ method: "POST" })
     if (raw.length > 5 * 1024 * 1024 * 1.37) {
       throw new Error("Image payload exceeds allowable size.");
     }
-    return { liveSelfieDataUrl: raw };
+    return {
+      liveSelfieDataUrl: raw,
+      capturedAt: typeof d.capturedAt === "number" ? d.capturedAt : undefined,
+      captureType: d.captureType ? String(d.captureType) : undefined,
+    };
   })
   .handler(async ({ data, context }): Promise<{ status: "approved" | "needs_review" | "rejected"; approved: boolean; reason: string }> => {
     const { supabase, userId } = context;
 
-    // Rate-limit live photo checks to 5 per hour per user
+    // 1. Rate-limit live photo checks to 5 per hour per user
     await assertRateLimit({
       action: "live_photo_verification",
       maxAttempts: 5,
@@ -162,12 +215,31 @@ export const submitLivePhotoVerification = createServerFn({ method: "POST" })
 
     const { data: p } = await supabase
       .from("profiles")
-      .select("first_name, photo_path, is_suspended, birth_date")
+      .select("first_name, photo_path, is_suspended, birth_date, verification_status")
       .eq("id", userId)
       .single();
 
     if (p?.is_suspended) {
       return { status: "rejected", approved: false, reason: "Account is suspended." };
+    }
+
+    // 2. Prevent repeated rapid submissions when already in review
+    if (p?.verification_status === "needs_review") {
+      return {
+        status: "needs_review",
+        approved: false,
+        reason: "Your verification request is already in the moderation review queue. A moderator will review it shortly.",
+      };
+    }
+
+    // 3. Prevent rapid verification attempt hammering after rejection
+    if (p?.verification_status === "rejected") {
+      await assertRateLimit({
+        action: "rejected_reverify_cooldown",
+        maxAttempts: 2,
+        windowSeconds: 900,
+        userId,
+      });
     }
 
     if (!p?.photo_path) {
@@ -179,33 +251,130 @@ export const submitLivePhotoVerification = createServerFn({ method: "POST" })
       return { status: "rejected", approved: false, reason: "Invalid profile photo path." };
     }
 
+    // 4. Validate fresh camera capture metadata:
+    // Reject submissions claiming to be gallery or with stale/missing timestamps
+    if (data.captureType === "gallery") {
+      return {
+        status: "rejected",
+        approved: false,
+        reason: "A fresh camera capture is required for verification. Existing gallery images cannot be accepted.",
+      };
+    }
+
+    if (data.capturedAt) {
+      const captureAge = Date.now() - data.capturedAt;
+      // Stale capture older than 5 minutes or future timestamp
+      if (captureAge > 5 * 60 * 1000 || captureAge < -30000) {
+        return {
+          status: "rejected",
+          approved: false,
+          reason: "Verification selfie has expired. Please take a fresh live photo using your camera.",
+        };
+      }
+    }
+
     // Download profile photo
     const { data: blob } = await supabase.storage.from("photos").download(safePath);
     if (!blob) {
       return { status: "rejected", approved: false, reason: "Could not retrieve uploaded profile photo." };
     }
 
-    const bytes = new Uint8Array(await blob.arrayBuffer());
+    const profileBytes = new Uint8Array(await blob.arrayBuffer());
+    const profileHash = computeImageSha256(profileBytes);
+
+    // Decode live selfie bytes
+    const base64Data = data.liveSelfieDataUrl.split(";base64,")[1] || "";
+    const selfieBytes = Buffer.from(base64Data, "base64");
+    const selfieHash = computeImageSha256(selfieBytes);
+
+    // 5. Anti-Fake Check: detect exact duplicate / gallery photo submission
+    // If the selfie is byte-identical to the user's profile photo, reject immediately
+    if (profileHash === selfieHash) {
+      return {
+        status: "rejected",
+        approved: false,
+        reason: "A fresh live camera selfie is required. You cannot submit your existing profile photo as verification evidence.",
+      };
+    }
+
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+
+    // Check if selfie matches any previously registered gallery photo
+    const { data: galleryMatch } = await supabaseAdmin
+      .from("security_events")
+      .select("actor_id")
+      .eq("event_type", "profile_photo_registered")
+      .contains("metadata", { photo_hash: selfieHash })
+      .limit(1);
+
+    if (galleryMatch && galleryMatch.length > 0) {
+      return {
+        status: "rejected",
+        approved: false,
+        reason: "A fresh live camera selfie is required. Pre-existing gallery photos cannot be used as verification evidence.",
+      };
+    }
+
+    // 6. Store verification evidence PRIVATELY with retention metadata:
+    // Stored in private bucket 'verification_evidence', never exposed publicly
+    const evidencePath = `${userId}/${Date.now()}_selfie.jpg`;
+    try {
+      await supabaseAdmin.storage
+        .from("verification_evidence")
+        .upload(evidencePath, selfieBytes, {
+          contentType: "image/jpeg",
+          upsert: true,
+        });
+    } catch (uploadErr) {
+      console.warn("[Verification] Could not store evidence to bucket:", uploadErr);
+    }
+
+    // Check if profile photo itself is a duplicate of another user's photo
+    const { data: duplicateProfile } = await supabaseAdmin
+      .from("security_events")
+      .select("actor_id")
+      .eq("event_type", "profile_photo_registered")
+      .contains("metadata", { photo_hash: profileHash })
+      .neq("actor_id", userId)
+      .limit(1);
+
+    if (duplicateProfile && duplicateProfile.length > 0) {
+      await supabaseAdmin.from("security_events").insert({
+        event_type: "duplicate_photo_detected",
+        severity: "warn",
+        actor_id: userId,
+        metadata: {
+          photo_hash: profileHash,
+          original_user_id: duplicateProfile[0].actor_id,
+          duplicate_user_id: userId,
+          evidence_path: evidencePath,
+          flagged_for_review: true,
+        },
+      });
+
+      const dupReason = "Duplicate profile photo detected — queued for moderator review to prevent impersonation.";
+      await supabaseAdmin.from("profiles").update({
+        verification_status: "needs_review",
+        verification_reason: dupReason,
+      }).eq("id", userId);
+
+      return { status: "needs_review", approved: false, reason: dupReason };
+    }
+
     let bin = "";
-    for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+    for (let i = 0; i < profileBytes.length; i += 0x8000) bin += String.fromCharCode(...profileBytes.subarray(i, i + 0x8000));
     const profileDataUrl = `data:${blob.type || "image/jpeg"};base64,${btoa(bin)}`;
 
     const key = process.env["LOVABLE_API_KEY"];
 
-    // MANUAL REVIEW FALLBACK:
-    // If no automated provider API key is configured, do not pretend or fake detection.
-    // Truthfully route to manual review.
+    // 7. MANUAL REVIEW FALLBACK:
+    // If no automated provider API key is configured, route truthfully to manual review
     if (!key) {
       const reason = "Your live photo check has been submitted for manual moderation review. An administrator will verify your profile shortly.";
-      try {
-        await supabase.rpc("set_profile_verification_verdict", {
-          p_user_id: userId,
-          p_status: "needs_review",
-          p_reason: reason,
-        });
-      } catch (e) {
-        console.warn("[Verification] set_profile_verification_verdict fallback:", e);
-      }
+      await supabaseAdmin.from("profiles").update({
+        verification_status: "needs_review",
+        verification_reason: reason,
+      }).eq("id", userId);
 
       return {
         status: "needs_review",
@@ -214,7 +383,7 @@ export const submitLivePhotoVerification = createServerFn({ method: "POST" })
       };
     }
 
-    // If key is available, call the vision comparison model
+    // 8. Call vision comparison model
     try {
       const res = await fetch("https://ai.gateway.lovable.dev/v1/responses", {
         method: "POST",
@@ -261,38 +430,95 @@ Return JSON matching schema:
 
       if (parsed.match && !parsed.ambiguous && parsed.confidence !== "low") {
         const reason = "Photo verified — live check confirmed identity.";
-        await supabase.rpc("set_profile_verification_verdict", {
-          p_user_id: userId,
-          p_status: "approved",
-          p_reason: reason,
-        });
+        await supabaseAdmin.from("profiles").update({
+          verification_status: "approved",
+          verification_reason: reason,
+        }).eq("id", userId);
+
         return { status: "approved", approved: true, reason };
       } else if (parsed.ambiguous || parsed.confidence === "low") {
         const reason = parsed.reason || "Selfie comparison was inconclusive — queued for manual review.";
-        await supabase.rpc("set_profile_verification_verdict", {
-          p_user_id: userId,
-          p_status: "needs_review",
-          p_reason: reason,
-        });
+        await supabaseAdmin.from("profiles").update({
+          verification_status: "needs_review",
+          verification_reason: reason,
+        }).eq("id", userId);
+
         return { status: "needs_review", approved: false, reason };
       } else {
         const reason = parsed.reason || "The live selfie did not sufficiently match your uploaded photo.";
-        await supabase.rpc("set_profile_verification_verdict", {
-          p_user_id: userId,
-          p_status: "rejected",
-          p_reason: reason,
-        });
+        await supabaseAdmin.from("profiles").update({
+          verification_status: "rejected",
+          verification_reason: reason,
+        }).eq("id", userId);
+
         return { status: "rejected", approved: false, reason };
       }
     } catch (err) {
       console.warn("[Verification] Provider comparison error, falling back to manual review:", err);
       const reason = "Automated check was unavailable — queued for manual administrator review.";
-      await supabase.rpc("set_profile_verification_verdict", {
-        p_user_id: userId,
-        p_status: "needs_review",
-        p_reason: reason,
-      });
+      await supabaseAdmin.from("profiles").update({
+        verification_status: "needs_review",
+        verification_reason: reason,
+      }).eq("id", userId);
+
       return { status: "needs_review", approved: false, reason };
     }
+  });
+
+/**
+ * Submit appeal for suspended account.
+ */
+export const submitSuspensionAppeal = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: { reason: string }) => {
+    const raw = String(d.reason ?? "").trim();
+    if (raw.length < 10) {
+      throw new Error("Please provide a detailed explanation for your appeal (minimum 10 characters).");
+    }
+    return { reason: raw.slice(0, 1000) };
+  })
+  .handler(async ({ data, context }) => {
+    const { supabase, userId } = context;
+
+    await assertRateLimit({
+      action: "suspension_appeal",
+      maxAttempts: 3,
+      windowSeconds: 86400,
+      userId,
+    });
+
+    const { data: res, error } = await supabase.rpc("submit_suspension_appeal", {
+      p_reason: data.reason,
+    });
+
+    if (error) {
+      // Fallback via admin client if RPC not deployed yet
+      const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+      await supabaseAdmin.from("security_events").insert({
+        event_type: "suspension_appeal",
+        severity: "info",
+        actor_id: userId,
+        metadata: {
+          appeal_reason: data.reason,
+          submitted_at: new Date().toISOString(),
+        },
+      });
+      return { ok: true, message: "Your appeal has been submitted to the moderation team." };
+    }
+
+    return res as { ok: boolean; message: string };
+  });
+
+/**
+ * Server-side rate limit check before account creation.
+ */
+export const checkSignupRateLimit = createServerFn({ method: "POST" })
+  .handler(async () => {
+    await assertRateLimit({
+      action: "auth:signup",
+      maxAttempts: 5,
+      windowSeconds: 3600, // 5 signups per hour per IP
+    });
+    return { allowed: true };
   });
 

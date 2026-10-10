@@ -118,33 +118,49 @@ export function PhotoVerificationModal({
     setCameraError(null);
     setStep("camera");
 
-    try {
-      if (!navigator.mediaDevices?.getUserMedia) {
-        throw new Error("Your browser does not support camera access.");
+    let mediaStream: MediaStream | null = null;
+    let lastError: any = null;
+
+    if (navigator.mediaDevices?.getUserMedia) {
+      try {
+        // Attempt 1: Optimal front camera selfie constraints
+        mediaStream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: "user",
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+          },
+          audio: false,
+        });
+      } catch (err1: any) {
+        lastError = err1;
+        try {
+          // Attempt 2: Minimal unconstrained video request
+          mediaStream = await navigator.mediaDevices.getUserMedia({
+            video: true,
+            audio: false,
+          });
+        } catch (err2: any) {
+          lastError = err2;
+        }
       }
+    } else {
+      lastError = new Error("Your browser or preview window does not support WebRTC camera access.");
+    }
 
-      const mediaStream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          facingMode: "user",
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
-        },
-        audio: false,
-      });
-
+    if (mediaStream) {
       setStream(mediaStream);
-
       if (videoRef.current) {
         videoRef.current.srcObject = mediaStream;
         videoRef.current.play().catch(() => {});
       }
-    } catch (err: any) {
-      console.error("Camera access error:", err);
-      let msg = "Could not activate camera. Please grant camera permission in your browser settings.";
-      if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError") {
-        msg = "Camera permission was denied. Please allow camera access in your browser settings to verify your photo.";
-      } else if (err.name === "NotFoundError" || err.name === "DevicesNotFoundError") {
-        msg = "No front camera was detected on this device.";
+    } else {
+      console.warn("Camera stream unavailable:", lastError);
+      let msg = "Could not activate live camera viewfinder. You can take your selfie directly using your device camera below.";
+      if (lastError?.name === "NotAllowedError" || lastError?.name === "PermissionDeniedError") {
+        msg = "Camera permission was denied or is blocked by your browser/preview frame. Don't worry — you can snap your selfie instantly using the device camera button below!";
+      } else if (lastError?.name === "NotFoundError" || lastError?.name === "DevicesNotFoundError") {
+        msg = "No webcam was detected on this device. Use your device camera or choose a photo below.";
       }
       setCameraError(msg);
     }
@@ -243,6 +259,16 @@ export function PhotoVerificationModal({
 
         {/* Content Body */}
         <div className="p-5 space-y-4">
+          {/* Always-mounted Native Device Camera Input */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            capture="user"
+            className="sr-only"
+            onChange={handleSelfieFileUpload}
+          />
+
           {/* STEP 1: Consent & Purpose Disclosure */}
           {step === "consent" && (
             <div className="space-y-4">
@@ -284,23 +310,44 @@ export function PhotoVerificationModal({
                 </div>
               )}
 
-              <div className="flex items-center gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => onOpenChange(false)}
-                  className="flex-1 rounded-xl border border-border py-2.5 text-xs font-bold text-foreground hover:bg-muted transition"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  disabled={!profilePhotoUrl}
-                  onClick={startCamera}
-                  className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-xl bg-action py-2.5 text-xs font-black uppercase tracking-wider text-action-foreground shadow-md transition hover:opacity-90 disabled:opacity-50"
-                >
-                  <span>Continue to Camera</span>
-                  <ArrowRight className="h-3.5 w-3.5" />
-                </button>
+              <div className="flex flex-col gap-2 pt-2">
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    disabled={!profilePhotoUrl}
+                    onClick={() => fileInputRef.current?.click()}
+                    className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-xl bg-action py-2.5 text-xs font-black uppercase tracking-wider text-action-foreground shadow-md transition hover:opacity-90 disabled:opacity-50"
+                  >
+                    <Camera className="h-3.5 w-3.5" />
+                    <span>Take Selfie with Camera</span>
+                  </button>
+                  <button
+                    type="button"
+                    disabled={!profilePhotoUrl}
+                    onClick={startCamera}
+                    className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-border bg-card px-3 py-2.5 text-xs font-bold text-foreground hover:bg-muted transition"
+                    title="Open in-browser live viewfinder"
+                  >
+                    <span>Viewfinder</span>
+                    <ArrowRight className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+                <div className="flex items-center justify-between text-xs pt-1">
+                  <button
+                    type="button"
+                    onClick={() => onOpenChange(false)}
+                    className="text-muted-foreground hover:text-foreground font-medium"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onOpenChange(false)}
+                    className="text-muted-foreground hover:text-foreground font-medium underline"
+                  >
+                    Skip for now
+                  </button>
+                </div>
               </div>
             </div>
           )}
@@ -315,42 +362,49 @@ export function PhotoVerificationModal({
                   </div>
 
                   <div>
-                    <h3 className="text-sm font-bold text-destructive">Camera Permission Denied</h3>
+                    <h3 className="text-sm font-bold text-destructive">Camera Access Restricted</h3>
                     <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
                       {cameraError}
                     </p>
+                  </div>
+
+                  {/* Device Camera Primary Action */}
+                  <div className="rounded-xl border border-action/30 bg-action/10 p-3 text-left space-y-2">
+                    <p className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                      <Camera className="h-4 w-4 text-action" />
+                      Take photo with native camera:
+                    </p>
+                    <p className="text-[11px] text-muted-foreground leading-relaxed">
+                      This opens your phone or laptop camera directly without needing browser WebRTC permissions.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-action py-2.5 text-xs font-black uppercase tracking-wider text-action-foreground shadow-sm transition hover:brightness-105 active:scale-98"
+                    >
+                      <Camera className="h-4 w-4" />
+                      <span>Take Selfie Now</span>
+                    </button>
                   </div>
 
                   {/* Browser Permission Steps */}
                   <div className="rounded-xl border border-border/80 bg-background/80 p-3 text-left text-[11px] space-y-1.5 text-muted-foreground">
                     <p className="font-bold text-foreground flex items-center gap-1.5">
                       <HelpCircle className="h-3.5 w-3.5 text-action" />
-                      To enable live camera:
+                      Enabled permission but still denied?
                     </p>
-                    <p>1. Tap the <b>lock or site settings icon</b> (🔒 or ⚙️) next to the URL in your browser.</p>
-                    <p>2. Set <b>Camera</b> to <b>Allow</b>, then tap Retry.</p>
-                  </div>
-
-                  {/* Device Camera Fallback */}
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept="image/*"
-                    capture="user"
-                    className="sr-only"
-                    onChange={handleSelfieFileUpload}
-                  />
-
-                  <div className="flex flex-col gap-2 pt-1">
+                    <p>Browsers require a <b>page reload</b> after you change permissions in site settings (🔒 or ⚙️).</p>
                     <button
                       type="button"
-                      onClick={() => fileInputRef.current?.click()}
-                      className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-action py-2.5 text-xs font-bold text-action-foreground shadow-sm transition hover:brightness-105 active:scale-98"
+                      onClick={() => window.location.reload()}
+                      className="inline-flex items-center gap-1 text-action font-bold underline hover:opacity-80 pt-0.5"
                     >
-                      <Camera className="h-4 w-4" />
-                      <span>Take Selfie with Device Camera</span>
+                      <RefreshCw className="h-3 w-3" />
+                      Reload page to apply new permissions
                     </button>
+                  </div>
 
+                  <div className="flex flex-col gap-2 pt-1">
                     <button
                       type="button"
                       onClick={startCamera}

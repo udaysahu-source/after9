@@ -310,6 +310,7 @@ export function PhotoPicker({
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const deviceCameraInputRef = useRef<HTMLInputElement | null>(null);
 
   const stopCamera = () => {
     if (cameraStream) {
@@ -323,31 +324,48 @@ export function PhotoPicker({
     setErr("");
     setCapturedPreview(null);
     setCapturedBlob(null);
-    try {
-      if (!navigator.mediaDevices?.getUserMedia) {
-        throw new Error("Camera not supported on this browser or device.");
+
+    // Try progressive WebRTC constraints
+    let stream: MediaStream | null = null;
+    if (navigator.mediaDevices?.getUserMedia) {
+      try {
+        // Attempt 1: Desired facingMode with ideal resolution
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: mode,
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+          },
+          audio: false,
+        });
+      } catch (e1: any) {
+        // Attempt 2: Minimal unconstrained video request
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: true,
+            audio: false,
+          });
+        } catch (e2) {
+          // WebRTC permission blocked, restricted in iframe, or unsupported
+          console.warn("WebRTC camera stream unavailable, opening device camera directly:", e2);
+        }
       }
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          facingMode: mode,
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
-        },
-        audio: false,
-      });
+    }
+
+    if (stream) {
       setCameraStream(stream);
       setCameraOpen(true);
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
         videoRef.current.play().catch(() => {});
       }
-    } catch (e: any) {
-      console.error("Camera error:", e);
-      let message = "Could not access camera. Please allow camera permissions in your browser.";
-      if (e.name === "NotAllowedError" || e.name === "PermissionDeniedError") {
-        message = "Camera permission was denied. Please allow camera access in browser settings.";
+    } else {
+      // Direct native device camera fallback - triggers device camera app reliably without WebRTC restrictions
+      if (deviceCameraInputRef.current) {
+        deviceCameraInputRef.current.click();
+      } else {
+        setErr("Could not access camera. Please allow camera permissions or upload a photo.");
       }
-      setErr(message);
     }
   };
 
@@ -503,6 +521,16 @@ export function PhotoPicker({
         ref={fileInputRef}
         type="file"
         accept="image/jpeg,image/png,image/webp"
+        className="sr-only"
+        onChange={(e) => pickFile(e.target.files?.[0])}
+      />
+
+      {/* Hidden Native Device Camera Input (bypasses WebRTC permission/iframe restrictions) */}
+      <input
+        ref={deviceCameraInputRef}
+        type="file"
+        accept="image/jpeg,image/png,image/webp"
+        capture="user"
         className="sr-only"
         onChange={(e) => pickFile(e.target.files?.[0])}
       />

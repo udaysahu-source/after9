@@ -64,6 +64,55 @@
       "when": 1791530000000,
       "tag": "0008_social_links_visibility",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1791531000000,
+      "tag": "0009_privacy_meter_and_audiences",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1791532000000,
+      "tag": "0010_notifications_and_web_push",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1791533000000,
+      "tag": "0011_admin_and_invitations",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1791534000000,
+      "tag": "0012_launch_control_and_referrals",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1791535000000,
+      "tag": "0013_security_hardening_and_rate_limiting",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1791536000000,
+      "tag": "0014_unlimited_referrals_and_metrics_privacy",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1791537000000,
+      "tag": "0015_admin_rls_and_verification_support",
+      "breakpoints": true
     }
   ]
 }

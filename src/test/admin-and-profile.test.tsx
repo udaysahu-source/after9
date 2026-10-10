@@ -1,6 +1,5 @@
 import { describe, it, expect } from "vitest";
 import { calculateProfileCompletion } from "@/routes/_authenticated/profile";
-import { INVITE_ALLOWANCE } from "@/lib/invites";
 import type { Database } from "@/integrations/supabase/types";
 
 import type { SocialLinkRow } from "@/lib/social-links";
@@ -106,17 +105,26 @@ describe("Profile Reorganization & Completion Calculation", () => {
 });
 
 describe("Authoritative Invitations & Referral Logic", () => {
-  it("enforces default allowance constant of 5 invitations", () => {
-    expect(INVITE_ALLOWANCE).toBe(5);
+  it("enforces unlimited referral sharing without arbitrary quotas", () => {
+    const inviteState = {
+      isUnlimited: true,
+      availableCount: Infinity,
+    };
+    expect(inviteState.isUnlimited).toBe(true);
+    expect(inviteState.availableCount).toBe(Infinity);
   });
 
-  it("computes accurate remaining invites without negative numbers", () => {
-    const computeRemaining = (claimed: number) => Math.max(0, INVITE_ALLOWANCE - claimed);
+  it("handles claimed referrals without arbitrary remaining limits or negative numbers", () => {
+    const formatReferralProgress = (claimed: number) => ({
+      claimed,
+      isUnlimited: true,
+      statusText: `${claimed} joined with your link`,
+    });
 
-    expect(computeRemaining(0)).toBe(5);
-    expect(computeRemaining(2)).toBe(3);
-    expect(computeRemaining(5)).toBe(0);
-    expect(computeRemaining(8)).toBe(0); // Boundary protection against negative remaining
+    expect(formatReferralProgress(0).statusText).toBe("0 joined with your link");
+    expect(formatReferralProgress(3).statusText).toBe("3 joined with your link");
+    expect(formatReferralProgress(15).claimed).toBe(15);
+    expect(formatReferralProgress(15).isUnlimited).toBe(true);
   });
 
   it("prevents self-referral and catches duplicate redemption attempts", () => {

@@ -46,8 +46,10 @@ import {
   AlertTriangle,
   ChevronRight,
   Info,
+  Camera,
 } from "lucide-react";
 import { ShareCardStudio } from "@/components/share-card-studio";
+import { PhotoVerificationModal } from "@/components/photo-verification-modal";
 import { SocialLinksManager } from "@/components/social-links-manager";
 import { ProfileVisibilityMeter } from "@/components/profile-visibility-meter";
 import { getMySocialLinks, type SocialLinkRow } from "@/lib/social-links";
@@ -122,6 +124,7 @@ function Profile() {
   const [activeCategory, setActiveCategory] = useState<ProfileCategory | null>(null);
   const [checking, setChecking] = useState(false);
   const [cardStudioOpen, setCardStudioOpen] = useState(false);
+  const [photoVerificationOpen, setPhotoVerificationOpen] = useState(false);
   const [socials, setSocials] = useState<SocialLinkRow[]>([]);
   const urls = usePhotoUrls([p?.photo_path]);
 
@@ -253,11 +256,34 @@ function Profile() {
                 </div>
 
                 <div className="min-w-0 flex-1 space-y-1">
-                  {/* 2. Name and age */}
-                  <h2 className="font-display text-xl font-extrabold text-primary truncate">
-                    {p.first_name || "Your Name"}
-                    {p.birth_date ? `, ${ageFrom(p.birth_date)}` : ""}
-                  </h2>
+                  {/* 2. Name, age, and photo verification badge */}
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h2 className="font-display text-xl font-extrabold text-primary truncate">
+                      {p.first_name || "Your Name"}
+                      {p.birth_date ? `, ${ageFrom(p.birth_date)}` : ""}
+                    </h2>
+                    {p.verification_status === "approved" ? (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-teal-500/15 border border-teal-500/30 px-2 py-0.5 text-[10px] font-bold text-teal-700 dark:text-teal-300">
+                        <ShieldCheck className="h-3 w-3" /> Photo verified
+                      </span>
+                    ) : p.verification_status === "needs_review" ? (
+                      <button
+                        type="button"
+                        onClick={() => setPhotoVerificationOpen(true)}
+                        className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 border border-amber-500/30 px-2 py-0.5 text-[10px] font-bold text-amber-700 dark:text-amber-300 hover:bg-amber-500/25 transition"
+                      >
+                        <RefreshCw className="h-3 w-3" /> Under Review
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setPhotoVerificationOpen(true)}
+                        className="inline-flex items-center gap-1 rounded-full bg-action/15 border border-action/30 px-2 py-0.5 text-[10px] font-bold text-action hover:bg-action/25 transition shadow-xs"
+                      >
+                        <Camera className="h-3 w-3" /> Verify Photo
+                      </button>
+                    )}
+                  </div>
 
                   {/* 3. College, if the user has enabled its visibility */}
                   {p.show_college && p.college ? (
@@ -474,6 +500,16 @@ function Profile() {
           photoUrl: (p.photo_path && urls[p.photo_path]) ? urls[p.photo_path]! : null,
           nights: Array.isArray(p.nights) ? (p.nights as number[]) : [],
           shareUrl: `${typeof window !== "undefined" ? window.location.origin : ""}/p/${p.share_token}`,
+        }}
+      />
+
+      {/* Live Photo Verification Modal */}
+      <PhotoVerificationModal
+        open={photoVerificationOpen}
+        onOpenChange={setPhotoVerificationOpen}
+        profilePhotoUrl={(p.photo_path && urls[p.photo_path]) ? urls[p.photo_path]! : null}
+        onVerificationComplete={async () => {
+          await reload();
         }}
       />
     </Shell>
@@ -1087,16 +1123,16 @@ function InvitationsCategory({ p }: { p: ProfileRow }) {
             </span>
             <div>
               <p className="text-[11px] font-bold tracking-widest text-action uppercase">COMMUNITY INVITES</p>
-              <h3 className="font-display text-base font-extrabold text-primary">Invite Your Friends</h3>
+              <h3 className="font-display text-base font-extrabold text-primary">Your Garba nights need a better crew.</h3>
             </div>
           </div>
-          <span className="rounded-full bg-action/15 px-3 py-1 text-xs font-bold text-action">
-            {status === "loading" ? "Checking…" : `${availableCount} of ${totalAllocation} Invites Left`}
+          <span className="rounded-full bg-emerald-500/15 border border-emerald-500/30 px-3 py-1 text-[11px] font-bold text-emerald-600 dark:text-emerald-400">
+            Unlimited Sharing Active
           </span>
         </div>
 
         <p className="text-xs text-muted-foreground leading-relaxed">
-          Share your personal invite link so your friends can connect with you on After9 during Navratri. Each member receives {totalAllocation} invitations to maintain an authentic community.
+          Find your people, plan your nights and make Navratri more memorable with After9. Distribute your personal link as many times as you like with friends and group chats.
         </p>
 
         {status === "error" ? (
@@ -1111,14 +1147,14 @@ function InvitationsCategory({ p }: { p: ProfileRow }) {
           </div>
         ) : (
           <div className="rounded-xl border border-border/80 bg-background/90 p-3 space-y-1">
-            <p className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground">Your Active Invite Link</p>
+            <p className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground">Your Persistent Invite Link</p>
             <p className="font-mono text-xs font-semibold text-primary truncate select-all">
-              {inviteUrl || (status === "loading" ? "Loading your invite link…" : "All invites claimed")}
+              {inviteUrl || (status === "loading" ? "Generating your invite link…" : "Ready to share")}
             </p>
           </div>
         )}
 
-        <div className="grid grid-cols-2 gap-2 pt-1">
+        <div className="grid grid-cols-3 gap-2 pt-1">
           <button
             type="button"
             onClick={() => handleCopy()}
@@ -1126,7 +1162,7 @@ function InvitationsCategory({ p }: { p: ProfileRow }) {
             className="flex items-center justify-center gap-1.5 rounded-xl bg-primary px-3 py-2.5 text-xs font-bold text-primary-foreground disabled:opacity-50"
           >
             {copied === primaryCode ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
-            {copied === primaryCode ? "Link Copied!" : "Copy Link"}
+            {copied === primaryCode ? "Copied!" : "Copy Link"}
           </button>
           <button
             type="button"
@@ -1137,7 +1173,20 @@ function InvitationsCategory({ p }: { p: ProfileRow }) {
             <Share2 className="h-3.5 w-3.5" />
             WhatsApp
           </button>
+          <button
+            type="button"
+            onClick={() => handleDrawCard()}
+            disabled={!primaryCode || status === "loading" || drawingCard}
+            className="flex items-center justify-center gap-1.5 rounded-xl border border-border bg-card px-3 py-2.5 text-xs font-bold text-foreground hover:bg-muted disabled:opacity-50"
+          >
+            {drawingCard ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5 text-action" />}
+            Story Card
+          </button>
         </div>
+
+        <p className="text-[11px] text-center font-medium italic text-muted-foreground pt-1">
+          After9 — “Meet on the floor. Stay after.”
+        </p>
       </div>
 
       {/* Redemption History */}

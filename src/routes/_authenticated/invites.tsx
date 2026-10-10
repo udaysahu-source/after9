@@ -71,7 +71,7 @@ function InviteList() {
     const r = await add({ data: { name, email } });
     setBusy(false);
     if (!r.ok) { setNote(r.reason ?? "Couldn't save that friend."); return; }
-    if (!r.hasCode) setNote("Saved — you're out of spare codes, so cancel an unused one to free it up.");
+    setNote("Saved to your crew! Share your personal invite link with them.");
     setName(""); setEmail("");
     load();
   };

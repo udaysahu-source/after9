@@ -1,5 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { assertRateLimit, recordSecurityEvent } from "./security-rate-limiter";
 
 /** How many invite passes each approved member gets. */
 export const INVITE_ALLOCATION = 5;
@@ -11,6 +12,14 @@ export const ensureInvites = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     const { userId } = context;
+
+    await assertRateLimit({
+      action: "ensure_invites",
+      maxAttempts: 15,
+      windowSeconds: 3600,
+      userId,
+    });
+
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
     // First try the transactional ensure_my_invites RPC
@@ -20,66 +29,107 @@ export const ensureInvites = createServerFn({ method: "POST" })
       return {
         ok: true as const,
         primaryCode: (res.primary_code ?? null) as string | null,
-        availableCount: typeof res.available_count === "number" ? res.available_count : 0,
+        availableCount: 999999,
         claimedCount: typeof res.claimed_count === "number" ? res.claimed_count : 0,
-        total: typeof res.total_allocation === "number" ? res.total_allocation : INVITE_ALLOCATION,
+        total: 999999,
+        isUnlimited: true as const,
       };
     }
 
-    // Fallback: Fetch caller's existing active invites
+    // Fallback: Fetch caller's existing active invites or generate persistent one
     const { data: existing } = await supabaseAdmin
       .from("invites")
-      .select("code, claimed_by, revoked, expires_at")
-      .eq("creator_id", userId);
+      .select("code, revoked, expires_at")
+      .eq("creator_id", userId)
+      .eq("revoked", false)
+      .order("created_at", { ascending: true })
+      .limit(1);
 
-    const validInvites = (existing ?? []).filter((i) => !i.revoked && (!i.expires_at || new Date(i.expires_at) > new Date()));
-    const missing = INVITE_ALLOCATION - validInvites.length;
-    let newlyCreated: string[] = [];
+    let primaryCode = existing?.[0]?.code ?? null;
 
-    if (missing > 0) {
-      const expires = new Date(Date.now() + 30 * 864e5).toISOString();
-      const rows = Array.from({ length: missing }, () => ({
-        code: newCode(),
+    if (!primaryCode) {
+      primaryCode = newCode();
+      await supabaseAdmin.from("invites").insert({
+        code: primaryCode,
         creator_id: userId,
-        expires_at: expires,
-      }));
-      await supabaseAdmin.from("invites").insert(rows);
-      newlyCreated = rows.map((r) => r.code);
+        expires_at: null, // Persistent: no expiration
+      });
     }
 
-    const available = validInvites.filter((i) => !i.claimed_by).map((i) => i.code);
-    // Never fall back to an already-claimed code!
-    const primaryCode = available[0] ?? newlyCreated[0] ?? null;
+    // Real count of members successfully attributed to caller
+    const { count: realClaimed } = await supabaseAdmin
+      .from("profiles")
+      .select("id", { count: "exact", head: true })
+      .eq("invited_by", userId);
 
     return {
       ok: true as const,
       primaryCode,
-      availableCount: available.length + newlyCreated.length,
-      claimedCount: validInvites.filter((i) => i.claimed_by).length,
-      total: INVITE_ALLOCATION,
+      availableCount: 999999,
+      claimedCount: realClaimed ?? 0,
+      total: 999999,
+      isUnlimited: true as const,
     };
   });
 
-/** Single-use claim, validated on the server. */
+/** Unlimited referral attribution claim, validated on the server. */
 export const claimInvite = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d: { code: string; chat?: boolean }) => ({ code: String(d.code ?? "").trim().toUpperCase().slice(0, 20), chat: !!d.chat }))
+  .inputValidator((d: { code: string; chat?: boolean; hp_trap?: string }) => ({
+    code: String(d.code ?? "").trim().toUpperCase().slice(0, 20),
+    chat: !!d.chat,
+    hp_trap: d.hp_trap ? String(d.hp_trap).trim() : undefined,
+  }))
   .handler(async ({ data, context }) => {
     const { userId } = context;
+
+    // Controlled Decoy Check: automated bots filling honeypot trap
+    if (data.hp_trap) {
+      await recordSecurityEvent({
+        eventType: "bot_decoy_triggered",
+        severity: "critical",
+        actorId: userId,
+        metadata: { field: "hp_trap", code: data.code },
+      });
+      return { ok: false, reason: "Invalid request submission." };
+    }
+
+    // Rate-limit referral code verification to 10 per 10 minutes (prevents brute forcing)
+    await assertRateLimit({
+      action: "claim_invite",
+      maxAttempts: 10,
+      windowSeconds: 600,
+      userId,
+    });
+
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { data: inv } = await supabaseAdmin.from("invites").select("*").eq("code", data.code).maybeSingle();
-    if (!inv) return { ok: false, reason: "That code doesn't exist." };
-    if (inv.revoked) return { ok: false, reason: "That code was cancelled." };
-    if (inv.expires_at && new Date(inv.expires_at) < new Date()) return { ok: false, reason: "That code has expired." };
-    if (inv.creator_id === userId) return { ok: false, reason: "You can't use your own code." };
-    if (inv.claimed_by && inv.claimed_by !== userId) return { ok: false, reason: "That code was already used." };
+    if (!inv) return { ok: false, reason: "That referral link doesn't exist." };
+    if (inv.revoked) return { ok: false, reason: "That referral link was cancelled." };
+    if (inv.expires_at && new Date(inv.expires_at) < new Date()) return { ok: false, reason: "That referral link has expired." };
+    if (inv.creator_id === userId) return { ok: false, reason: "You can't use your own referral link." };
+
     const { data: me } = await supabaseAdmin.from("profiles").select("invited_by").eq("id", userId).single();
-    if (me?.invited_by && me.invited_by !== inv.creator_id) return { ok: false, reason: "You've already joined with an invite." };
-    // atomic single-use: only claim if still unclaimed
-    const { data: claimed } = await supabaseAdmin.from("invites").update({ claimed_by: userId, claimed_at: new Date().toISOString() })
-      .eq("code", inv.code).is("claimed_by", null).select("code");
-    if (!claimed?.length && inv.claimed_by !== userId) return { ok: false, reason: "That code was already used." };
+    if (me?.invited_by) {
+      if (me.invited_by === inv.creator_id) {
+        return { ok: true, reason: "You're already connected through this invitation." };
+      }
+      return { ok: false, reason: "You've already joined through an invitation." };
+    }
+
+    // Record server-side attribution
+    await supabaseAdmin.from("referral_attributions").upsert(
+      {
+        referrer_id: inv.creator_id,
+        referee_id: userId,
+        code: inv.code,
+      },
+      { onConflict: "referee_id" }
+    ).catch(() => {});
+
+    // Set invited_by on the referee's profile
     await supabaseAdmin.from("profiles").update({ invited_by: inv.creator_id }).eq("id", userId);
+
     if (data.chat) {
       // Chat link: open a clash straight away so the two of you can talk.
       await supabaseAdmin.from("dandiyas").upsert([
@@ -134,6 +184,14 @@ export const addInviteContact = createServerFn({ method: "POST" })
   }))
   .handler(async ({ data, context }) => {
     const { userId } = context;
+
+    await assertRateLimit({
+      action: "add_invite_contact",
+      maxAttempts: 20,
+      windowSeconds: 3600,
+      userId,
+    });
+
     if (!data.name) return { ok: false as const, reason: "Add your friend's name." };
     if (!EMAIL_RE.test(data.email)) return { ok: false as const, reason: "That email doesn't look right." };
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");

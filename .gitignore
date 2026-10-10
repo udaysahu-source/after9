@@ -18,6 +18,13 @@ dist-ssr
 .env
 .env.*
 !.env.example
+*.pem
+*.key
+*.cert
+*.pfx
+*.p12
+*.credentials
+*.secrets
 
 # Test outputs
 test-results/

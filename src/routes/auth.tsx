@@ -22,46 +22,61 @@ const input = "h-14 w-full border-b-2 border-border bg-transparent text-lg outli
 
 function Auth() {
   const nav = useNavigate();
-  const [mode, setMode] = useState<"signup" | "signin">("signup");
+  const [mode, setMode] = useState<"signup" | "signin" | "recovery">("signup");
   const [email, setEmail] = useState("");
   const [pw, setPw] = useState("");
+  const [hp, setHp] = useState(""); // Honeypot decoy field
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
   const [showResend, setShowResend] = useState(false);
+  const [failCount, setFailCount] = useState(0);
+  const [cooldownSeconds, setCooldownSeconds] = useState(0);
 
-  const [invite, setInvite] = useState("");
   useEffect(() => {
-    const searchParams = new URLSearchParams(location.search);
-    const hashParams = new URLSearchParams(location.hash.replace(/^#/, ""));
-
-    const code = searchParams.get("invite") ?? localStorage.getItem("after9.invite");
-    if (code) { localStorage.setItem("after9.invite", code.toUpperCase()); setInvite(code.toUpperCase()); }
-    if (searchParams.get("chat")) localStorage.setItem("after9.chat", "1");
-
-    // Catch any OAuth or verification errors returned from redirect
-    const errorDesc = searchParams.get("error_description") || hashParams.get("error_description");
-    if (errorDesc) setMsg(decodeURIComponent(errorDesc.replace(/\+/g, " ")));
-
-    // Check if user is already authenticated
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) nav({ to: "/discover" });
-    });
-
-    const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {
-      if ((event === "SIGNED_IN" || event === "INITIAL_SESSION") && session) {
-        nav({ to: "/discover" });
-      }
-    });
-    return () => sub.subscription.unsubscribe();
-  }, [nav]);
+    if (cooldownSeconds <= 0) return;
+    const t = setInterval(() => setCooldownSeconds((c) => Math.max(0, c - 1)), 1000);
+    return () => clearInterval(t);
+  }, [cooldownSeconds]);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (cooldownSeconds > 0) {
+      return setMsg(`Too many consecutive attempts. Please wait ${cooldownSeconds} seconds.`);
+    }
+
+    // Controlled Decoy Check: Bots filling hidden form field
+    if (hp.trim()) {
+      supabase.rpc("log_security_event", {
+        p_event_type: "bot_decoy_triggered",
+        p_severity: "critical",
+        p_metadata: { form: "auth_submit", mode },
+      }).catch(() => {});
+      return setMsg("Invalid submission detected.");
+    }
+
     setBusy(true);
     setMsg("");
     setShowResend(false);
 
     try {
+      if (mode === "recovery") {
+        if (!email.trim()) {
+          setBusy(false);
+          return setMsg("Enter your account email to receive a password recovery link.");
+        }
+        const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+          redirectTo: `${window.location.origin}/discover`,
+        });
+        setBusy(false);
+        if (error) {
+          return setMsg(error.message);
+        }
+        setMsg(`If an account exists for ${email.trim()}, password recovery instructions have been sent to your inbox.`);
+        setMode("signin");
+        return;
+      }
+
       if (mode === "signup") {
         const { data, error } = await supabase.auth.signUp({
           email: email.trim(),
@@ -70,8 +85,9 @@ function Auth() {
         });
         setBusy(false);
         if (error) {
+          setFailCount((f) => f + 1);
           if (error.message.includes("weak_password") || error.message.includes("pwned")) {
-            return setMsg("Password was identified as common or weak. Please choose a more unique, stronger password.");
+            return setMsg("Password was identified as common or weak. Please choose a more unique, stronger password (8+ characters).");
           }
           return setMsg(error.message);
         }
@@ -89,6 +105,17 @@ function Auth() {
         });
         setBusy(false);
         if (error) {
+          const nextFail = failCount + 1;
+          setFailCount(nextFail);
+          if (nextFail >= 5) {
+            setCooldownSeconds(30);
+            supabase.rpc("log_security_event", {
+              p_event_type: "repeated_auth_failures",
+              p_severity: "warn",
+              p_metadata: { failures: nextFail },
+            }).catch(() => {});
+          }
+
           if (error.message.toLowerCase().includes("invalid login credentials")) {
             setShowResend(true);
             return setMsg("Invalid credentials. If you just created an account, please verify your email in your inbox first before signing in.");
@@ -99,6 +126,7 @@ function Auth() {
           }
           return setMsg(error.message);
         }
+        setFailCount(0);
         if (data?.session || data?.user) {
           nav({ to: "/discover" });
         }
@@ -193,6 +221,18 @@ function Auth() {
         </Btn>
         <p className="my-5 text-center text-xs tracking-widest text-muted-foreground">OR</p>
         <form onSubmit={submit} className="flex flex-col gap-4">
+          {/* Controlled Decoy field: Invisible to genuine users and screen readers, filled by naive bots */}
+          <input
+            type="text"
+            name="hp_organizer_code"
+            tabIndex={-1}
+            autoComplete="off"
+            style={{ position: "absolute", opacity: 0, height: 0, width: 0, pointerEvents: "none", zIndex: -1 }}
+            aria-hidden="true"
+            value={hp}
+            onChange={(e) => setHp(e.target.value)}
+          />
+
           <input
             className={input}
             type="email"
@@ -201,15 +241,33 @@ function Auth() {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
           />
-          <input
-            className={input}
-            type="password"
-            required
-            minLength={8}
-            placeholder="Password (8+ characters)"
-            value={pw}
-            onChange={(e) => setPw(e.target.value)}
-          />
+          {mode !== "recovery" && (
+            <input
+              className={input}
+              type="password"
+              required
+              minLength={8}
+              placeholder="Password (8+ characters)"
+              value={pw}
+              onChange={(e) => setPw(e.target.value)}
+            />
+          )}
+
+          {mode === "signin" && (
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={() => {
+                  setMsg("");
+                  setMode("recovery");
+                }}
+                className="text-xs text-muted-foreground hover:text-foreground transition underline"
+              >
+                Forgot password?
+              </button>
+            </div>
+          )}
+
           {msg && (
             <div className="animate-shake rounded-sm border-l-2 border-primary bg-card p-3 text-sm text-foreground shadow-xs">
               <p>{msg}</p>
@@ -225,7 +283,7 @@ function Auth() {
             </div>
           )}
           <Btn loading={busy} className="touch-tactile mt-2 shadow-sm">
-            {mode === "signup" ? "Create account" : "Sign in"}
+            {mode === "signup" ? "Create account" : mode === "signin" ? "Sign in" : "Send recovery link"}
           </Btn>
         </form>
         <button
@@ -236,7 +294,11 @@ function Auth() {
             setMode(mode === "signup" ? "signin" : "signup");
           }}
         >
-          {mode === "signup" ? "Already on After9? Sign in" : "New here? Create an account"}
+          {mode === "signup"
+            ? "Already on After9? Sign in"
+            : mode === "recovery"
+              ? "Back to Sign in"
+              : "New here? Create an account"}
         </button>
       </div>
     </Shell>

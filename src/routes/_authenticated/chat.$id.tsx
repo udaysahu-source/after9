@@ -66,10 +66,14 @@ function Chat() {
 
   const send = async (e: React.FormEvent) => {
     e.preventDefault();
-    const body = t.trim();
+    const body = t.trim().slice(0, 1000);
     if (!body) return;
     setT("");
-    const { data } = await supabase.from("messages").insert({ sender_id: me, recipient_id: id, body }).select().single();
+    const { data, error } = await supabase.from("messages").insert({ sender_id: me, recipient_id: id, body }).select().single();
+    if (error) {
+      console.warn("[Chat] Send failed:", error.message);
+      return;
+    }
     if (data) setMsgs((x) => (x.some((y) => y.id === data.id) ? x : [...x, data]));
   };
   const block = async (report: boolean) => {

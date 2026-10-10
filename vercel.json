@@ -1,4 +1,39 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "buildCommand": "NITRO_PRESET=vercel npm run build"
+  "buildCommand": "NITRO_PRESET=vercel npm run build",
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        {
+          "key": "Content-Security-Policy",
+          "value": "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.lovable.dev https://*.supabase.co; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https://*.supabase.co https://*.googleusercontent.com https://lh3.googleusercontent.com; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://*.lovable.dev https://ai.gateway.lovable.dev; frame-ancestors 'self' https://*.lovable.dev https://*.lovable.app https://*.gptengineer.run; object-src 'none'; base-uri 'self'; form-action 'self';"
+        },
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        },
+        {
+          "key": "X-Frame-Options",
+          "value": "SAMEORIGIN"
+        },
+        {
+          "key": "Strict-Transport-Security",
+          "value": "max-age=63072000; includeSubDomains; preload"
+        },
+        {
+          "key": "Referrer-Policy",
+          "value": "strict-origin-when-cross-origin"
+        },
+        {
+          "key": "Permissions-Policy",
+          "value": "camera=(), microphone=(), geolocation=(), payment=()"
+        },
+        {
+          "key": "X-XSS-Protection",
+          "value": "0"
+        }
+      ]
+    }
+  ]
 }

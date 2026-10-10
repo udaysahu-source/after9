@@ -392,12 +392,8 @@ function Discover() {
       {launchControl && !launchControl.discover_enabled ? (
         <EarlyCommunityView
           userProfile={me}
-          readinessTarget={launchControl.readiness_target ?? 50}
-          completedProfilesCount={launchControl.completed_profiles_count ?? 0}
-          totalRegisteredUsers={launchControl.total_registered_users ?? 0}
-          nightCounts={launchControl.night_counts ?? {}}
-          cityCounts={launchControl.city_counts ?? {}}
           onOpenInviteModal={() => setInviteModalOpen(true)}
+          onOpenShareCard={() => setShareStudioOpen(true)}
           onProfileUpdated={loadDiscoveryData}
         />
       ) : (
@@ -696,7 +692,7 @@ function Discover() {
         </div>
       )}
 
-      <InviteShareModal open={inviteModalOpen} onOpenChange={setInviteModalOpen} />
+      <InviteShareModal open={inviteModalOpen} onOpenChange={setInviteModalOpen} userProfile={me} />
 
       {me && (
         <ShareCardStudio

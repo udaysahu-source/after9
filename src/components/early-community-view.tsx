@@ -4,73 +4,35 @@ import { toast } from "sonner";
 import {
   Users,
   Ticket,
-  Copy,
-  Check,
-  Share2,
   Calendar,
   Sparkles,
-  ShieldCheck,
-  CheckCircle2,
   ArrowRight,
+  Share2,
+  CheckCircle2,
+  AlertCircle,
+  Camera,
 } from "lucide-react";
 import { NIGHTS, goingNights, type ProfileRow } from "@/lib/after9";
-import { useAuthoritativeInvites } from "@/lib/invites";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 
 export interface EarlyCommunityViewProps {
   userProfile: ProfileRow | null;
-  readinessTarget: number;
-  completedProfilesCount: number;
-  totalRegisteredUsers: number;
-  nightCounts: Record<string, number>;
-  cityCounts: Record<string, number>;
   onOpenInviteModal: () => void;
+  onOpenShareCard?: () => void;
   onProfileUpdated?: () => void;
 }
 
 export function EarlyCommunityView({
   userProfile,
-  readinessTarget = 50,
-  completedProfilesCount = 0,
-  totalRegisteredUsers = 0,
-  nightCounts = {},
-  cityCounts = {},
   onOpenInviteModal,
+  onOpenShareCard,
   onProfileUpdated,
 }: EarlyCommunityViewProps) {
-  const { primaryCode, availableCount, totalAllocation, status: inviteStatus } = useAuthoritativeInvites();
-  const [copied, setCopied] = useState(false);
   const [savingNight, setSavingNight] = useState<number | null>(null);
 
   // Active nights for current user
   const userNights = userProfile ? goingNights(userProfile.nights) : [];
-
-  const handleCopyLink = async () => {
-    if (!primaryCode) {
-      onOpenInviteModal();
-      return;
-    }
-    const url = `${window.location.origin}/?invite=${primaryCode}`;
-    try {
-      await navigator.clipboard.writeText(url);
-      setCopied(true);
-      toast.success("Personal invite link copied! 📋");
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      toast.error("Could not copy link");
-    }
-  };
-
-  const handleWhatsAppShare = () => {
-    if (!primaryCode) {
-      onOpenInviteModal();
-      return;
-    }
-    const url = `${window.location.origin}/?invite=${primaryCode}`;
-    const text = `Hey! Join me on After9 for Navratri & Garba nights in Raipur. Claim your community invite here: ${url}`;
-    window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`, "_blank");
-  };
 
   const toggleNight = async (nightNum: number) => {
     if (!userProfile) return;
@@ -104,204 +66,221 @@ export function EarlyCommunityView({
     }
   };
 
-  // Calculate real progress towards readiness target
-  const target = Math.max(1, readinessTarget);
-  const currentReady = Math.max(0, completedProfilesCount);
-  const progressPercent = Math.min(100, Math.round((currentReady / target) * 100));
+  // Check missing essential profile elements
+  const missingItems: string[] = [];
+  if (!userProfile?.photo_path) missingItems.push("Profile portrait");
+  if (!userProfile?.prompt?.trim()) missingItems.push("Garba prompt");
+  if (!userProfile?.birth_date) missingItems.push("Birthday");
+  if (userNights.length === 0) missingItems.push("Festival nights");
 
-  // Determine top night participation
-  const topNightEntries = Object.entries(nightCounts)
-    .filter(([_, cnt]) => cnt > 0)
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 3);
+  const isProfileComplete = missingItems.length === 0;
 
   return (
-    <div className="mx-auto w-full max-w-xl space-y-6 px-4 pb-12 pt-4">
-      {/* Hero Badge */}
-      <div className="text-center space-y-3">
-        <div className="inline-flex items-center gap-2 rounded-full border border-action/30 bg-action/10 px-3.5 py-1 text-xs font-bold text-action shadow-2xs">
-          <Sparkles className="h-3.5 w-3.5 animate-pulse" />
-          <span>EARLY COMMUNITY FORMATION PHASE</span>
+    <div className="mx-auto w-full max-w-xl space-y-6 px-4 pb-12 pt-2">
+      {/* Festival-inspired Visual & Welcoming Header */}
+      <div className="relative overflow-hidden rounded-3xl border border-action/40 bg-gradient-to-b from-action/15 via-card to-card p-6 sm:p-8 text-center shadow-lg">
+        {/* Subtle decorative festival sparkles & dandiya motif */}
+        <div className="absolute -top-12 -right-12 h-36 w-36 rounded-full bg-action/20 blur-2xl pointer-events-none" />
+        <div className="absolute -bottom-12 -left-12 h-36 w-36 rounded-full bg-primary/20 blur-2xl pointer-events-none" />
+
+        <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-action/20 text-action shadow-inner">
+          <span className="text-2xl">✨</span>
         </div>
 
         <h1 className="font-display text-2xl font-black tracking-tight text-primary sm:text-3xl">
           Your Garba crew starts here.
         </h1>
 
-        <p className="text-xs sm:text-sm text-muted-foreground max-w-md mx-auto leading-relaxed">
-          Invite your friends to After9. We're bringing the right people together for better Garba nights in Raipur. Matchmaking unlocks once the community is ready.
+        <p className="mt-3 text-sm text-muted-foreground leading-relaxed max-w-md mx-auto">
+          Bring your people to After9. Build your circle, pick your Garba nights and get ready to meet when the floor comes alive.
         </p>
+
+        {/* Truthful Community Opening Explanation */}
+        <div className="mt-5 inline-flex items-center gap-2 rounded-full border border-border/80 bg-background/80 px-4 py-1.5 text-xs font-semibold text-muted-foreground shadow-2xs">
+          <span>💫</span>
+          <span>Discovering other people will become available when the community opens.</span>
+        </div>
+
+        {/* Primary Action: Invite Your Friends */}
+        <div className="mt-6 flex flex-col sm:flex-row items-center justify-center gap-3">
+          <button
+            type="button"
+            onClick={onOpenInviteModal}
+            className="touch-tactile w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-xl bg-action px-6 py-3.5 text-sm font-extrabold text-action-foreground shadow-md transition hover:opacity-95 active:scale-98"
+          >
+            <Ticket className="h-4 w-4" />
+            <span>Invite Your Friends</span>
+          </button>
+
+          {onOpenShareCard && (
+            <button
+              type="button"
+              onClick={onOpenShareCard}
+              className="touch-tactile w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-xl border border-border bg-card px-5 py-3.5 text-sm font-bold text-foreground transition hover:bg-muted active:scale-98"
+            >
+              <Share2 className="h-4 w-4 text-action" />
+              <span>Preview My Share Card</span>
+            </button>
+          )}
+        </div>
       </div>
 
-      {/* Real Community Readiness Indicator */}
-      <div className="rounded-2xl border border-action/40 bg-gradient-to-br from-card via-card to-action/5 p-5 shadow-xs space-y-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-action/20 text-action">
-              <Users className="h-5 w-5" />
+      {/* Profile Completion Action (Shown if Profile is Incomplete) */}
+      {!isProfileComplete && (
+        <div className="rounded-2xl border border-amber-500/40 bg-amber-500/10 p-5 space-y-3 shadow-xs">
+          <div className="flex items-start gap-3">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber-500/20 text-amber-600">
+              <Camera className="h-5 w-5" />
             </span>
-            <div>
-              <p className="text-[10px] uppercase font-bold tracking-wider text-action">COMMUNITY READINESS</p>
-              <h2 className="font-display text-base font-extrabold text-primary">
-                {currentReady} of {target} Members Ready
+            <div className="space-y-1">
+              <h2 className="font-display text-sm font-extrabold text-foreground">
+                Complete your profile before doors open
               </h2>
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                Add your {missingItems.join(", ")} so your circle knows who to look for on the floor.
+              </p>
             </div>
           </div>
-          <span className="rounded-full bg-action/15 px-3 py-1 text-xs font-extrabold text-action">
-            {progressPercent}%
-          </span>
-        </div>
 
-        {/* Progress bar */}
-        <div className="space-y-1.5">
-          <div className="h-2.5 w-full overflow-hidden rounded-full bg-muted">
-            <div
-              className="h-full rounded-full bg-gradient-to-r from-action to-primary transition-all duration-700"
-              style={{ width: `${progressPercent}%` }}
-            />
-          </div>
-          <div className="flex justify-between text-[11px] text-muted-foreground font-mono">
-            <span>{currentReady} profiles complete</span>
-            <span>Launch target: {target}</span>
+          <div className="flex justify-end pt-1">
+            <Link
+              to="/profile"
+              className="touch-tactile inline-flex items-center gap-1.5 rounded-xl bg-primary px-4 py-2 text-xs font-bold text-primary-foreground transition hover:opacity-90 shadow-xs"
+            >
+              <span>Complete Profile</span>
+              <ArrowRight className="h-3.5 w-3.5" />
+            </Link>
           </div>
         </div>
+      )}
 
-        {/* Raipur & Top Night Stats (Real Data Only) */}
-        {topNightEntries.length > 0 && (
-          <div className="rounded-xl border border-border/80 bg-background/60 p-3 space-y-1.5">
-            <p className="text-[10px] font-bold tracking-wider text-muted-foreground uppercase">
-              POPULAR NIGHTS SO FAR (RAIPUR)
-            </p>
-            <div className="flex flex-wrap gap-2 text-xs">
-              {topNightEntries.map(([nightKey, count]) => (
-                <span
-                  key={nightKey}
-                  className="inline-flex items-center gap-1 rounded-lg border border-border bg-card px-2.5 py-1 text-[11px] font-semibold text-primary"
-                >
-                  <Calendar className="h-3 w-3 text-action" />
-                  Night {nightKey}: <b>{count} going</b>
-                </span>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Primary Actions: Invite Crew */}
-      <div className="rounded-2xl border border-border bg-card p-5 space-y-3.5 shadow-xs">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
-              <Ticket className="h-4 w-4" />
-            </span>
-            <h3 className="font-display text-sm font-bold text-primary">Invite Your Friends</h3>
-          </div>
-          <span className="text-[11px] font-bold text-muted-foreground">
-            {inviteStatus === "loading" ? "Loading..." : `${availableCount} of ${totalAllocation} left`}
-          </span>
-        </div>
-
-        <p className="text-xs text-muted-foreground">
-          Each member receives personal invitation passes. Share your link directly on WhatsApp or copy it to bring your college and Garba circle in.
-        </p>
-
-        <div className="grid grid-cols-2 gap-2.5 pt-1">
-          <button
-            type="button"
-            onClick={handleCopyLink}
-            className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-border bg-background px-3 py-2.5 text-xs font-bold text-primary transition hover:bg-muted active:scale-95"
-          >
-            {copied ? <Check className="h-3.5 w-3.5 text-emerald-600" /> : <Copy className="h-3.5 w-3.5" />}
-            <span>{copied ? "Link Copied!" : "Copy Invite Link"}</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={handleWhatsAppShare}
-            className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-emerald-600 px-3 py-2.5 text-xs font-bold text-white transition hover:bg-emerald-700 active:scale-95 shadow-xs"
-          >
-            <Share2 className="h-3.5 w-3.5" />
-            <span>Share on WhatsApp</span>
-          </button>
-        </div>
-
-        <button
-          type="button"
-          onClick={onOpenInviteModal}
-          className="w-full inline-flex items-center justify-center gap-1.5 rounded-xl bg-action px-3 py-2.5 text-xs font-bold text-action-foreground transition hover:opacity-90 active:scale-95"
-        >
-          <span>Open Full Invite Pass & QR Card</span>
-          <ArrowRight className="h-3.5 w-3.5" />
-        </button>
-      </div>
-
-      {/* Select Your Garba Nights (Quick Setup) */}
-      <div className="rounded-2xl border border-border bg-card p-5 space-y-3.5 shadow-xs">
+      {/* Secondary Action: Choose My Garba Nights */}
+      <div className="rounded-2xl border border-border bg-card p-5 space-y-4 shadow-xs">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
               <Calendar className="h-4 w-4" />
             </span>
             <div>
-              <h3 className="font-display text-sm font-bold text-primary">Select Your Garba Nights</h3>
-              <p className="text-[11px] text-muted-foreground">Tap the nights you plan to play in Raipur</p>
+              <h2 className="font-display text-sm font-extrabold text-primary">Choose My Garba Nights</h2>
+              <p className="text-[11px] text-muted-foreground">Select the nights you plan to be on the floor in Raipur</p>
             </div>
           </div>
-          <span className="rounded-full bg-muted px-2.5 py-0.5 text-[11px] font-bold text-primary">
-            {userNights.length} of 9
+          <span className="text-xs font-bold text-action">
+            {userNights.length} {userNights.length === 1 ? "night" : "nights"} selected
           </span>
         </div>
 
-        <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">
+        {/* Interactive 9-Night Selector Grid */}
+        <div className="grid grid-cols-3 gap-2 sm:grid-cols-3">
           {NIGHTS.map((n) => {
-            const isGoing = userNights.includes(n.n);
-            const isSaving = savingNight === n.n;
+            const isGoing = userNights.includes(n.night);
+            const isSaving = savingNight === n.night;
             return (
               <button
-                key={n.n}
+                key={n.night}
                 type="button"
+                onClick={() => toggleNight(n.night)}
                 disabled={isSaving}
-                onClick={() => toggleNight(n.n)}
                 className={cn(
-                  "touch-tactile flex flex-col items-center justify-center rounded-xl border p-2 text-center transition-all",
+                  "touch-tactile relative flex flex-col items-center justify-center rounded-xl border p-2.5 text-center transition-all",
                   isGoing
-                    ? "border-action bg-action/15 text-primary font-bold shadow-2xs"
-                    : "border-border/70 bg-background text-muted-foreground hover:border-primary/40",
-                  isSaving && "opacity-50"
+                    ? "border-action bg-action/15 text-primary shadow-xs ring-1 ring-action"
+                    : "border-border/70 bg-background/60 text-muted-foreground hover:border-action/40"
                 )}
               >
-                <span className="text-xs font-extrabold">Night {n.n}</span>
-                <span className="text-[10px] opacity-75">{n.date}</span>
-                {isGoing && <CheckCircle2 className="h-3 w-3 text-action mt-0.5" />}
+                <span className="text-[10px] font-black uppercase tracking-wider text-action">
+                  Night {n.night}
+                </span>
+                <span className="font-display text-xs font-extrabold text-foreground mt-0.5">
+                  {n.theme.split(" ")[0]}
+                </span>
+                <span className="text-[10px] text-muted-foreground mt-0.5">
+                  {n.date.split(" ")[0]}
+                </span>
+                {isGoing && (
+                  <CheckCircle2 className="absolute top-1.5 right-1.5 h-3.5 w-3.5 text-action" />
+                )}
               </button>
             );
           })}
         </div>
       </div>
 
-      {/* Complete Profile Action */}
-      <div className="flex items-center justify-between rounded-2xl border border-border/80 bg-muted/40 p-4">
-        <div className="flex items-center gap-2.5">
-          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-background text-primary">
-            <ShieldCheck className="h-4 w-4 text-emerald-600" />
-          </span>
-          <div>
-            <p className="text-xs font-bold text-primary">Profile & Verified Photo</p>
-            <p className="text-[11px] text-muted-foreground">
-              {userProfile?.verification_status === "approved"
-                ? "Verified & ready for launch"
-                : "Complete all fields to get verified"}
-            </p>
+      {/* User's Share Card Preview */}
+      {userProfile && (
+        <div className="rounded-2xl border border-border bg-card p-5 space-y-3.5 shadow-xs">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-action/10 text-action">
+                <Sparkles className="h-4 w-4" />
+              </span>
+              <div>
+                <h2 className="font-display text-sm font-extrabold text-primary">Your After9 Share Card</h2>
+                <p className="text-[11px] text-muted-foreground">Preview how you appear on Instagram Stories & WhatsApp</p>
+              </div>
+            </div>
+            {onOpenShareCard && (
+              <button
+                type="button"
+                onClick={onOpenShareCard}
+                className="text-xs font-bold text-action hover:underline"
+              >
+                Customize →
+              </button>
+            )}
+          </div>
+
+          {/* Mini Editorial Card Preview */}
+          <div className="relative overflow-hidden rounded-2xl border border-border/80 bg-gradient-to-b from-[#260E27] to-[#120514] p-4 text-white shadow-md space-y-3">
+            <div className="flex items-center justify-between text-[11px] font-bold text-amber-400/90 tracking-wider">
+              <span>GARBA PLANS?</span>
+              <span className="text-white/60">NAVRATRI 2026</span>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <div className="h-16 w-16 shrink-0 overflow-hidden rounded-xl border border-white/20 bg-primary/20">
+                {userProfile.photo_path ? (
+                  <img
+                    src={`${userProfile.photo_path}`}
+                    alt={userProfile.first_name || "Profile"}
+                    className="h-full w-full object-cover"
+                    onError={(e) => {
+                      (e.target as HTMLElement).style.display = "none";
+                    }}
+                  />
+                ) : (
+                  <div className="flex h-full w-full items-center justify-center font-display text-xl font-black text-amber-300">
+                    {(userProfile.first_name || "A").slice(0, 1)}
+                  </div>
+                )}
+              </div>
+              <div className="min-w-0">
+                <p className="font-display text-base font-extrabold text-[#FAF4EA] truncate">
+                  {userProfile.first_name || "Your Name"}
+                </p>
+                {userProfile.college && (
+                  <p className="text-xs text-white/70 truncate">{userProfile.college}</p>
+                )}
+                <p className="text-[11px] text-amber-400 font-semibold mt-0.5">
+                  {userNights.length > 0 ? `${userNights.length} nights on the floor` : "Looking for Garba plans"}
+                </p>
+              </div>
+            </div>
+
+            {userProfile.prompt && (
+              <p className="text-xs italic text-white/80 border-l-2 border-amber-400 pl-2 line-clamp-2">
+                “{userProfile.prompt}”
+              </p>
+            )}
+
+            <div className="flex items-center justify-between pt-1 border-t border-white/10 text-[10px] text-white/50">
+              <span>AFTER9 · Meet on the floor.</span>
+              <span>Raipur</span>
+            </div>
           </div>
         </div>
-        <Link
-          to="/profile"
-          className="inline-flex items-center gap-1 rounded-xl bg-background border border-border px-3 py-1.5 text-xs font-bold text-primary transition hover:bg-muted"
-        >
-          <span>Edit Profile</span>
-          <ArrowRight className="h-3 w-3" />
-        </Link>
-      </div>
+      )}
     </div>
   );
 }

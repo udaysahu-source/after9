@@ -54,7 +54,7 @@ export function ShareCardStudio({
 
   const [config, setConfig] = useState<CardCustomization>({
     template: savedPreferences?.template || "editorial",
-    theme: savedPreferences?.theme || "plum",
+    theme: savedPreferences?.theme || "auto",
     focalY: savedPreferences?.focalY ?? 50,
     showCollege: savedPreferences?.showCollege ?? !!cardData.college,
     showPrompt: savedPreferences?.showPrompt ?? !!cardData.prompt,
@@ -350,11 +350,12 @@ export function ShareCardStudio({
                     <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
                       Color Atmosphere
                     </label>
-                    <div className="mt-2 grid grid-cols-3 gap-2">
+                    <div className="mt-2 grid grid-cols-2 sm:grid-cols-4 gap-2">
                       {[
-                        { key: "plum", label: "Plum Dusk", swatch: "#2A1428" },
-                        { key: "saffron", label: "Warm Saffron", swatch: "#4A1806" },
-                        { key: "midnight", label: "Midnight", swatch: "#151518" },
+                        { key: "auto", label: "Auto (Photo)", swatch: "linear-gradient(135deg, #FF9E3B, #9C27B0)", isGradient: true },
+                        { key: "plum", label: "Plum Dusk", swatch: "#2A1428", isGradient: false },
+                        { key: "saffron", label: "Warm Saffron", swatch: "#4A1806", isGradient: false },
+                        { key: "midnight", label: "Midnight", swatch: "#151518", isGradient: false },
                       ].map((th) => (
                         <button
                           key={th.key}
@@ -369,7 +370,7 @@ export function ShareCardStudio({
                         >
                           <span
                             className="h-4 w-4 rounded-full border border-white/20 shrink-0"
-                            style={{ backgroundColor: th.swatch }}
+                            style={th.isGradient ? { background: th.swatch } : { backgroundColor: th.swatch }}
                           />
                           <span className="truncate">{th.label}</span>
                         </button>

@@ -1,8 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 
-export const INVITE_ALLOWANCE = 5;
-
 export interface InviteItem {
   code: string;
   revoked: boolean;
@@ -19,6 +17,7 @@ export interface AuthoritativeInvitesData {
   availableCount: number;
   claimedCount: number;
   totalAllocation: number;
+  isUnlimited: boolean;
   invites: InviteItem[];
 }
 
@@ -32,13 +31,15 @@ export interface AuthoritativeInvitesState extends AuthoritativeInvitesData {
  * Single source of truth for user invites.
  * Uses the Postgres transactional RPC `ensure_my_invites()` so invitation
  * generation, counts, and primary code are consistent across all screens.
+ * Provides unlimited referral sharing with real server-tracked attributions.
  */
 export function useAuthoritativeInvites(autoFetch = true): AuthoritativeInvitesState {
   const [data, setData] = useState<AuthoritativeInvitesData>({
     primaryCode: null,
-    availableCount: 0,
+    availableCount: 999999,
     claimedCount: 0,
-    totalAllocation: 5,
+    totalAllocation: 999999,
+    isUnlimited: true,
     invites: [],
   });
   const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">(autoFetch ? "loading" : "idle");
@@ -64,9 +65,10 @@ export function useAuthoritativeInvites(autoFetch = true): AuthoritativeInvitesS
 
         setData({
           primaryCode: primary,
-          availableCount: available.length,
+          availableCount: 999999,
           claimedCount: claimed.length,
-          totalAllocation: 5,
+          totalAllocation: 999999,
+          isUnlimited: true,
           invites: rawList.map((i) => ({
             code: i.code,
             revoked: i.revoked,
@@ -89,9 +91,10 @@ export function useAuthoritativeInvites(autoFetch = true): AuthoritativeInvitesS
 
       setData({
         primaryCode: res.primary_code ?? null,
-        availableCount: typeof res.available_count === "number" ? res.available_count : 0,
+        availableCount: 999999,
         claimedCount: typeof res.claimed_count === "number" ? res.claimed_count : 0,
-        totalAllocation: typeof res.total_allocation === "number" ? res.total_allocation : 5,
+        totalAllocation: 999999,
+        isUnlimited: true,
         invites: Array.isArray(res.invites) ? res.invites : [],
       });
       setStatus("success");

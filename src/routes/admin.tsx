@@ -23,7 +23,9 @@ import {
   Sparkles,
   Rocket,
   Globe,
+  KeyRound,
 } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
 import {
   checkAdminStatus,
   getAdminOverviewMetrics,
@@ -39,6 +41,7 @@ import {
   saveAdminEvent,
   getAdminSystemHealth,
   getAdminAuditLogs,
+  getAdminSecurityOverview,
   type AdminStatusResult,
 } from "@/lib/admin.functions";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
@@ -53,7 +56,7 @@ export const Route = createFileRoute("/admin")({
   component: AdminDashboard,
 });
 
-type AdminTab = "overview" | "launch" | "users" | "moderation" | "invites" | "events" | "health";
+type AdminTab = "overview" | "launch" | "users" | "moderation" | "invites" | "events" | "health" | "security";
 
 function AdminDashboard() {
   const checkStatus = useServerFn(checkAdminStatus);
@@ -70,10 +73,13 @@ function AdminDashboard() {
   const saveEvent = useServerFn(saveAdminEvent);
   const getHealth = useServerFn(getAdminSystemHealth);
   const getAuditLogs = useServerFn(getAdminAuditLogs);
+  const getSecurityOverview = useServerFn(getAdminSecurityOverview);
 
   const [authStatus, setAuthStatus] = useState<AdminStatusResult | null>(null);
   const [loadingAuth, setLoadingAuth] = useState(true);
   const [activeTab, setActiveTab] = useState<AdminTab>("overview");
+  const [securityData, setSecurityData] = useState<any>(null);
+  const [securityLoading, setSecurityLoading] = useState(false);
 
   // State for metrics
   const [metrics, setMetrics] = useState<any>(null);
@@ -124,18 +130,109 @@ function AdminDashboard() {
   const [auditLogs, setAuditLogs] = useState<any[]>([]);
   const [healthLoading, setHealthLoading] = useState(false);
 
-  // Initial auth check
-  useEffect(() => {
-    checkStatus()
-      .then((res) => {
-        setAuthStatus(res);
-        setLoadingAuth(false);
-      })
-      .catch(() => {
-        setAuthStatus({ isAdmin: false, role: null, email: null, userId: null });
-        setLoadingAuth(false);
+  // Admin login form state
+  const [adminEmail, setAdminEmail] = useState("");
+  const [adminPassword, setAdminPassword] = useState("");
+  const [adminSigningIn, setAdminSigningIn] = useState(false);
+  const [adminAuthError, setAdminAuthError] = useState("");
+  const [resetSent, setResetSent] = useState(false);
+
+  // Initial auth check with session awareness
+  const refreshAuth = useCallback(async () => {
+    setLoadingAuth(true);
+    try {
+      const res = await checkStatus();
+      setAuthStatus(res);
+    } catch {
+      const { data } = await supabase.auth.getSession();
+      const user = data?.session?.user;
+      setAuthStatus({
+        isAdmin: false,
+        role: null,
+        email: user?.email ?? null,
+        userId: user?.id ?? null,
+        serviceRoleConfigured: false,
       });
+    } finally {
+      setLoadingAuth(false);
+    }
   }, [checkStatus]);
+
+  useEffect(() => {
+    refreshAuth();
+  }, [refreshAuth]);
+
+  // Handle Admin Direct Sign In
+  const handleAdminSignIn = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!adminEmail.trim() || !adminPassword) {
+      setAdminAuthError("Please enter both administrator email and password.");
+      return;
+    }
+
+    setAdminSigningIn(true);
+    setAdminAuthError("");
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: adminEmail.trim(),
+        password: adminPassword,
+      });
+
+      if (error) {
+        setAdminAuthError(error.message);
+        return;
+      }
+
+      toast.success("Authentication successful! Verifying administrator role…");
+      const status = await checkStatus();
+      setAuthStatus(status);
+      if (!status.isAdmin) {
+        setAdminAuthError(`Account "${adminEmail.trim()}" is authenticated, but does not have administrator privileges.`);
+      }
+    } catch (err: any) {
+      setAdminAuthError(err.message || "Failed to sign in. Please verify your credentials.");
+    } finally {
+      setAdminSigningIn(false);
+    }
+  };
+
+  // Handle Admin Sign Out
+  const handleAdminSignOut = async () => {
+    try {
+      await supabase.auth.signOut();
+      setAuthStatus({ isAdmin: false, role: null, email: null, userId: null });
+      setAdminEmail("");
+      setAdminPassword("");
+      toast.success("Signed out successfully.");
+    } catch (err: any) {
+      toast.error(err.message || "Could not sign out.");
+    }
+  };
+
+  // Handle Password Reset Link
+  const handlePasswordReset = async () => {
+    if (!adminEmail.trim()) {
+      setAdminAuthError("Please enter your admin email above first to receive password recovery.");
+      return;
+    }
+    setAdminSigningIn(true);
+    setAdminAuthError("");
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(adminEmail.trim(), {
+        redirectTo: `${window.location.origin}/admin`,
+      });
+      if (error) {
+        setAdminAuthError(error.message);
+      } else {
+        setResetSent(true);
+        toast.success(`Password recovery link sent to ${adminEmail.trim()}!`);
+      }
+    } catch (err: any) {
+      setAdminAuthError(err.message || "Could not send password recovery link.");
+    } finally {
+      setAdminSigningIn(false);
+    }
+  };
 
   // Load Tab Data
   const loadTabData = useCallback(async () => {
@@ -227,6 +324,16 @@ function AdminDashboard() {
       } finally {
         setHealthLoading(false);
       }
+    } else if (activeTab === "security") {
+      setSecurityLoading(true);
+      try {
+        const sec = await getSecurityOverview();
+        setSecurityData(sec);
+      } catch (err: any) {
+        toast.error(err.message || "Could not load security overview");
+      } finally {
+        setSecurityLoading(false);
+      }
     }
   }, [
     authStatus?.isAdmin,
@@ -302,32 +409,141 @@ function AdminDashboard() {
     );
   }
 
-  // Not authorized state
+  // Not authorized / Not logged in state
   if (!authStatus?.isAdmin) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-background px-4">
-        <div className="w-full max-w-md rounded-2xl border border-border/80 bg-card p-6 shadow-xl space-y-4 text-center">
-          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-destructive/15 text-destructive">
-            <Lock className="h-7 w-7" />
+    // Case 1: User is already logged into an account that lacks admin rights
+    if (authStatus?.userId) {
+      return (
+        <div className="flex min-h-screen items-center justify-center bg-background px-4 py-8">
+          <div className="w-full max-w-md rounded-2xl border border-border/80 bg-card p-6 shadow-xl space-y-4 text-center">
+            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-destructive/15 text-destructive">
+              <Lock className="h-7 w-7" />
+            </div>
+            <div>
+              <h1 className="font-display text-2xl font-extrabold text-primary">Admin Access Restricted</h1>
+              <p className="text-sm text-muted-foreground mt-1.5 leading-relaxed">
+                This area is restricted to authorized After9 administrators. Privileges are strictly enforced server-side.
+              </p>
+            </div>
+            <div className="rounded-xl border border-border bg-background p-3 text-xs text-muted-foreground">
+              Signed in as <b className="text-foreground">{authStatus.email || "Unknown account"}</b>
+              <p className="text-[11px] text-destructive mt-1 font-medium">This account does not have administrator privileges.</p>
+            </div>
+            <div className="pt-2 flex flex-col sm:flex-row items-center justify-center gap-2.5">
+              <button
+                type="button"
+                onClick={handleAdminSignOut}
+                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-xl border border-border bg-background px-4 py-2.5 text-xs font-bold text-foreground hover:bg-muted shadow-xs transition"
+              >
+                <LogOut className="h-3.5 w-3.5" />
+                Sign Out & Switch Account
+              </button>
+              <Link
+                to="/discover"
+                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-xs font-bold text-primary-foreground shadow-xs transition hover:opacity-90"
+              >
+                <ArrowLeft className="h-3.5 w-3.5" />
+                Return to After9
+              </Link>
+            </div>
           </div>
-          <div>
-            <h1 className="font-display text-2xl font-extrabold text-primary">Admin Access Restricted</h1>
-            <p className="text-sm text-muted-foreground mt-1.5 leading-relaxed">
-              This interface is restricted to authorized After9 administrators. Privileges are enforced server-side.
+        </div>
+      );
+    }
+
+    // Case 2: User is unauthenticated — Render the Dedicated Admin Sign In Form
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background px-4 py-8">
+        <div className="w-full max-w-md rounded-2xl border border-border/80 bg-card p-6 sm:p-8 shadow-xl space-y-5">
+          <div className="text-center space-y-2">
+            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-action/15 text-action">
+              <KeyRound className="h-7 w-7" />
+            </div>
+            <h1 className="font-display text-2xl font-black text-primary">After9 Control Center</h1>
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              Sign in with your authorized administrator account to manage After9 operations, moderation and discovery.
             </p>
           </div>
-          {authStatus?.email && (
-            <div className="rounded-xl border border-border bg-background p-3 text-xs text-muted-foreground">
-              Signed in as <b className="text-foreground">{authStatus.email}</b>
+
+          {adminAuthError && (
+            <div className="rounded-xl border border-destructive/40 bg-destructive/10 p-3 text-xs text-destructive font-medium space-y-1">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="h-4 w-4 shrink-0" />
+                <span>{adminAuthError}</span>
+              </div>
             </div>
           )}
-          <div className="pt-2">
+
+          {resetSent && (
+            <div className="rounded-xl border border-teal-500/40 bg-teal-500/10 p-3 text-xs text-teal-800 dark:text-teal-300 font-medium">
+              ✓ Password recovery instructions have been dispatched to your email. Check your inbox to reset your password.
+            </div>
+          )}
+
+          <form onSubmit={handleAdminSignIn} className="space-y-4">
+            <div>
+              <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground mb-1 block">
+                Admin Email Address
+              </label>
+              <input
+                type="email"
+                required
+                autoComplete="email"
+                placeholder="admin@example.com"
+                value={adminEmail}
+                onChange={(e) => setAdminEmail(e.target.value)}
+                className="w-full rounded-xl border border-border bg-background px-3.5 py-2.5 text-sm font-medium text-foreground outline-none transition focus:border-action focus:ring-1 focus:ring-action"
+              />
+            </div>
+
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground block">
+                  Password
+                </label>
+                <button
+                  type="button"
+                  onClick={handlePasswordReset}
+                  disabled={adminSigningIn}
+                  className="text-[11px] font-semibold text-action hover:underline"
+                >
+                  Forgot password?
+                </button>
+              </div>
+              <input
+                type="password"
+                required
+                autoComplete="current-password"
+                placeholder="••••••••"
+                value={adminPassword}
+                onChange={(e) => setAdminPassword(e.target.value)}
+                className="w-full rounded-xl border border-border bg-background px-3.5 py-2.5 text-sm font-medium text-foreground outline-none transition focus:border-action focus:ring-1 focus:ring-action"
+              />
+            </div>
+
+            <button
+              type="submit"
+              disabled={adminSigningIn}
+              className="w-full flex items-center justify-center gap-2 rounded-xl bg-action px-4 py-3 text-xs font-black uppercase tracking-wider text-action-foreground shadow-md transition hover:opacity-90 disabled:opacity-50"
+            >
+              {adminSigningIn ? (
+                <>
+                  <RefreshCw className="h-4 w-4 animate-spin" />
+                  Verifying Credentials…
+                </>
+              ) : (
+                "Sign In to Control Center"
+              )}
+            </button>
+          </form>
+
+          <div className="pt-2 border-t border-border/60 text-center">
             <Link
               to="/discover"
-              className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-xs font-bold text-primary-foreground shadow-xs transition hover:opacity-90"
+              className="inline-flex items-center gap-1.5 text-xs font-semibold text-muted-foreground hover:text-primary transition"
             >
-              <ArrowLeft className="h-4 w-4" />
-              Return to After9
+              <ArrowLeft className="h-3.5 w-3.5" />
+              Return to Public App
             </Link>
           </div>
         </div>
@@ -420,8 +636,16 @@ function AdminDashboard() {
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
-            <span className="hidden sm:inline-flex rounded-full border border-border bg-muted/60 px-2.5 py-1 text-xs text-muted-foreground">
+          <div className="flex items-center gap-2 sm:gap-3">
+            {authStatus.serviceRoleConfigured === false && (
+              <span
+                className="hidden lg:inline-flex rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-0.5 text-[11px] font-semibold text-amber-600 dark:text-amber-400"
+                title="Service role key not configured in .env. Admin operations are enforced via verified PostgreSQL RLS policies."
+              >
+                Direct RLS Mode
+              </span>
+            )}
+            <span className="hidden sm:inline-flex rounded-full border border-border bg-muted/60 px-2.5 py-1 text-xs text-muted-foreground font-mono">
               {authStatus.role} · {authStatus.email}
             </span>
             <button
@@ -430,6 +654,14 @@ function AdminDashboard() {
               title="Refresh data"
             >
               <RefreshCw className="h-3.5 w-3.5" />
+            </button>
+            <button
+              onClick={handleAdminSignOut}
+              className="flex items-center gap-1.5 rounded-lg border border-destructive/30 bg-destructive/10 px-2.5 py-1.5 text-xs font-bold text-destructive hover:bg-destructive/20 transition"
+              title="Sign Out of Admin"
+            >
+              <LogOut className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">Sign Out</span>
             </button>
           </div>
         </div>
@@ -444,6 +676,7 @@ function AdminDashboard() {
             { id: "invites", label: "Referrals & Invites", icon: Ticket },
             { id: "events", label: "Events & Plans", icon: Calendar },
             { id: "health", label: "System Health & Audit", icon: ShieldCheck },
+            { id: "security", label: "Security & Threat Defense", icon: Lock },
           ].map((tab) => {
             const Icon = tab.icon;
             const active = activeTab === tab.id;
@@ -1414,6 +1647,213 @@ function AdminDashboard() {
                   </table>
                 </div>
               </div>
+            </div>
+          )}
+
+          {activeTab === "security" && (
+            <div className="space-y-6">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <div>
+                  <h2 className="font-display text-2xl font-extrabold text-primary flex items-center gap-2">
+                    <Lock className="h-6 w-6 text-action" /> Defensive Security & Threat Monitoring
+                  </h2>
+                  <p className="text-xs text-muted-foreground">
+                    Active defenses against account takeover, unauthorized access, bot abuse, and credential stuffing.
+                  </p>
+                </div>
+                <button
+                  onClick={async () => {
+                    setSecurityLoading(true);
+                    try {
+                      const sec = await getSecurityOverview();
+                      setSecurityData(sec);
+                      toast.success("Security metrics refreshed");
+                    } catch (e: any) {
+                      toast.error(e.message || "Refresh failed");
+                    } finally {
+                      setSecurityLoading(false);
+                    }
+                  }}
+                  disabled={securityLoading}
+                  className="inline-flex items-center gap-1.5 self-start rounded-xl border border-border/80 bg-card px-3 py-1.5 text-xs font-semibold hover:bg-muted/60 transition"
+                >
+                  <RefreshCw className={`h-3.5 w-3.5 ${securityLoading ? "animate-spin" : ""}`} /> Refresh
+                </button>
+              </div>
+
+              {securityData && (
+                <>
+                  {/* Threat Posture Status Banner */}
+                  <div className={`rounded-2xl border p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 ${
+                    securityData.metrics.threatLevel === "ELEVATED"
+                      ? "border-destructive/60 bg-destructive/10 text-destructive"
+                      : securityData.metrics.threatLevel === "GUARDED"
+                      ? "border-amber-500/50 bg-amber-500/10 text-amber-700 dark:text-amber-300"
+                      : "border-teal-500/40 bg-teal-500/10 text-teal-700 dark:text-teal-300"
+                  }`}>
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-card shadow-xs">
+                        {securityData.metrics.threatLevel === "ELEVATED" ? (
+                          <AlertTriangle className="h-5 w-5 text-destructive" />
+                        ) : securityData.metrics.threatLevel === "GUARDED" ? (
+                          <ShieldAlert className="h-5 w-5 text-amber-500" />
+                        ) : (
+                          <ShieldCheck className="h-5 w-5 text-teal-600" />
+                        )}
+                      </div>
+                      <div>
+                        <p className="text-sm font-bold">Threat Level: {securityData.metrics.threatLevel}</p>
+                        <p className="text-xs opacity-90">
+                          {securityData.metrics.threatLevel === "NOMINAL"
+                            ? "All defensive security controls operational. No critical abuse patterns detected."
+                            : securityData.metrics.threatLevel === "GUARDED"
+                            ? "Elevated automated probe or rate limit triggers observed. Defenses active."
+                            : "Multiple severe security incidents or bot attacks intercepted. Review event logs below."}
+                        </p>
+                      </div>
+                    </div>
+                    <span className="rounded-full bg-card px-3 py-1 text-xs font-black uppercase font-mono shadow-xs">
+                      {securityData.metrics.totalSecurityEvents} Events Tracked
+                    </span>
+                  </div>
+
+                  {/* 4 Metric Cards */}
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-4">
+                    <div className="rounded-2xl border border-border/80 bg-card p-4 space-y-1">
+                      <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Rate Limits Tripped (24h)</p>
+                      <p className="text-3xl font-black text-primary font-mono">{securityData.metrics.rateLimits24h}</p>
+                      <p className="text-[11px] text-muted-foreground">Server & DB sliding window throttles</p>
+                    </div>
+
+                    <div className="rounded-2xl border border-border/80 bg-card p-4 space-y-1">
+                      <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Bot Decoy Traps (24h)</p>
+                      <p className="text-3xl font-black text-primary font-mono">{securityData.metrics.botTraps24h}</p>
+                      <p className="text-[11px] text-muted-foreground">Automated honeypot triggers blocked</p>
+                    </div>
+
+                    <div className="rounded-2xl border border-border/80 bg-card p-4 space-y-1">
+                      <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Auth Denials (24h)</p>
+                      <p className="text-3xl font-black text-primary font-mono">{securityData.metrics.authFailures24h}</p>
+                      <p className="text-[11px] text-muted-foreground">Unauthorized privileged attempts</p>
+                    </div>
+
+                    <div className="rounded-2xl border border-border/80 bg-card p-4 space-y-1">
+                      <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Suspended Accounts</p>
+                      <p className="text-3xl font-black text-primary font-mono">{securityData.metrics.suspendedUsersCount}</p>
+                      <p className="text-[11px] text-muted-foreground">Enforced via DB RLS & triggers</p>
+                    </div>
+                  </div>
+
+                  {/* Defensive Layers Checklist */}
+                  <div className="rounded-2xl border border-border/80 bg-card p-5 space-y-3">
+                    <h3 className="font-display text-base font-bold text-primary">Hardened Defensive Architecture</h3>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 text-xs">
+                      <div className="flex items-start gap-2 rounded-xl bg-muted/40 p-3">
+                        <CheckCircle2 className="h-4 w-4 text-teal-600 shrink-0 mt-0.5" />
+                        <div>
+                          <p className="font-bold text-foreground">RLS Owner Isolation</p>
+                          <p className="text-muted-foreground text-[11px]">Profiles, contacts, and cards protected against cross-user access.</p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-start gap-2 rounded-xl bg-muted/40 p-3">
+                        <CheckCircle2 className="h-4 w-4 text-teal-600 shrink-0 mt-0.5" />
+                        <div>
+                          <p className="font-bold text-foreground">Suspension Lockouts</p>
+                          <p className="text-muted-foreground text-[11px]">Suspended accounts blocked by DB triggers from chats, swipes, and feed.</p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-start gap-2 rounded-xl bg-muted/40 p-3">
+                        <CheckCircle2 className="h-4 w-4 text-teal-600 shrink-0 mt-0.5" />
+                        <div>
+                          <p className="font-bold text-foreground">Distributed Rate Limiter</p>
+                          <p className="text-muted-foreground text-[11px]">Sliding-window rate limits on AI verify, invites, and admin mutations.</p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-start gap-2 rounded-xl bg-muted/40 p-3">
+                        <CheckCircle2 className="h-4 w-4 text-teal-600 shrink-0 mt-0.5" />
+                        <div>
+                          <p className="font-bold text-foreground">Storage Access Control</p>
+                          <p className="text-muted-foreground text-[11px]">Storage photo reads strictly restricted; blocked/private users protected.</p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-start gap-2 rounded-xl bg-muted/40 p-3">
+                        <CheckCircle2 className="h-4 w-4 text-teal-600 shrink-0 mt-0.5" />
+                        <div>
+                          <p className="font-bold text-foreground">Controlled Decoy Traps</p>
+                          <p className="text-muted-foreground text-[11px]">Hidden honeypots in auth forms intercept scrapers and automated bots.</p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-start gap-2 rounded-xl bg-muted/40 p-3">
+                        <CheckCircle2 className="h-4 w-4 text-teal-600 shrink-0 mt-0.5" />
+                        <div>
+                          <p className="font-bold text-foreground">Production Network Headers</p>
+                          <p className="text-muted-foreground text-[11px]">Strict CSP, HSTS, frame-ancestors, and X-Content-Type-Options active.</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Security Events Stream */}
+                  <div className="space-y-3">
+                    <h3 className="font-display text-lg font-bold text-primary">Live Security & Threat Events Log</h3>
+                    <div className="overflow-x-auto rounded-2xl border border-border/80 bg-card shadow-xs">
+                      <table className="w-full text-left text-xs">
+                        <thead className="border-b border-border bg-muted/40 font-bold uppercase tracking-wider text-muted-foreground">
+                          <tr>
+                            <th className="px-4 py-3">Timestamp</th>
+                            <th className="px-4 py-3">Severity</th>
+                            <th className="px-4 py-3">Event Type</th>
+                            <th className="px-4 py-3">Actor / IP Hash</th>
+                            <th className="px-4 py-3">Details</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-border/60">
+                          {securityData.events.length === 0 ? (
+                            <tr>
+                              <td colSpan={5} className="px-4 py-6 text-center text-muted-foreground">
+                                No security incidents or anomalies recorded. All systems normal.
+                              </td>
+                            </tr>
+                          ) : (
+                            securityData.events.map((ev: any) => (
+                              <tr key={ev.id} className="hover:bg-muted/30 transition">
+                                <td className="px-4 py-3 text-muted-foreground font-mono whitespace-nowrap">
+                                  {new Date(ev.created_at).toLocaleString()}
+                                </td>
+                                <td className="px-4 py-3 whitespace-nowrap">
+                                  <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${
+                                    ev.severity === "critical"
+                                      ? "bg-destructive/15 text-destructive"
+                                      : ev.severity === "warn"
+                                      ? "bg-amber-500/15 text-amber-600 dark:text-amber-400"
+                                      : "bg-teal-500/15 text-teal-600 dark:text-teal-400"
+                                  }`}>
+                                    {ev.severity}
+                                  </span>
+                                </td>
+                                <td className="px-4 py-3 font-semibold text-foreground font-mono text-[11px]">
+                                  {ev.event_type}
+                                </td>
+                                <td className="px-4 py-3 font-mono text-[11px] text-muted-foreground">
+                                  {ev.ip_hash || (ev.actor_id ? `uid:${ev.actor_id.slice(0, 8)}` : "—")}
+                                </td>
+                                <td className="px-4 py-3 text-[11px] text-muted-foreground max-w-xs truncate font-mono">
+                                  {JSON.stringify(ev.metadata)}
+                                </td>
+                              </tr>
+                            ))
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
           )}
         </div>

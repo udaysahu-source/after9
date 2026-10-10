@@ -1,7 +1,12 @@
 import appIcon from "@/assets/app_icon.png";
+import {
+  extractAtmosphereFromPhoto,
+  DEFAULT_ATMOSPHERE,
+  type CardPalette,
+} from "./color-atmosphere";
 
 export type CardTemplate = "editorial" | "minimal" | "festival";
-export type CardTheme = "plum" | "saffron" | "midnight";
+export type CardTheme = "auto" | "plum" | "saffron" | "midnight";
 
 export type CardCustomization = {
   template: CardTemplate;
@@ -32,19 +37,8 @@ export type ProfileCardData = {
 
 // Curated Palettes: Deep plum, royal maroon, warm cream/ivory, and warm saffron accents
 export const THEMES: Record<
-  CardTheme,
-  {
-    bgGradStart: string;
-    bgGradEnd: string;
-    accent: string;
-    accentWarm: string;
-    textPrimary: string;
-    textSecondary: string;
-    textMuted: string;
-    cardBorder: string;
-    tagBg: string;
-    photoBorder: string;
-  }
+  Exclude<CardTheme, "auto">,
+  CardPalette
 > = {
   plum: {
     bgGradStart: "#260E27", // Royal deep plum
@@ -227,9 +221,18 @@ export async function renderCardToCanvas(
   const H = 1920;
   canvas.width = W;
   canvas.height = H;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return;
 
-  const ctx = canvas.getContext("2d")!;
-  const theme = THEMES[c.theme] || THEMES.plum;
+  const [icon, photo] = await Promise.all([
+    loadImgSafe(appIcon),
+    d.photoUrl ? loadImgSafe(d.photoUrl) : null,
+  ]);
+
+  const theme: CardPalette =
+    c.theme === "auto" || !c.theme
+      ? extractAtmosphereFromPhoto(photo)
+      : (THEMES as any)[c.theme] || DEFAULT_ATMOSPHERE;
 
   // 1. Draw Canvas Background Gradient
   const bgGrad = ctx.createLinearGradient(0, 0, 0, H);
@@ -237,11 +240,6 @@ export async function renderCardToCanvas(
   bgGrad.addColorStop(1, theme.bgGradEnd);
   ctx.fillStyle = bgGrad;
   ctx.fillRect(0, 0, W, H);
-
-  const [icon, photo] = await Promise.all([
-    loadImgSafe(appIcon),
-    d.photoUrl ? loadImgSafe(d.photoUrl) : null,
-  ]);
 
   if (c.template === "editorial") {
     await renderEditorialTemplate(ctx, W, H, d, c, theme, icon, photo);
@@ -263,7 +261,7 @@ async function renderEditorialTemplate(
   H: number,
   d: ProfileCardData,
   c: CardCustomization,
-  theme: (typeof THEMES)["plum"],
+  theme: CardPalette,
   icon: HTMLImageElement | null,
   photo: HTMLImageElement | null
 ) {
@@ -433,7 +431,7 @@ async function renderMinimalTemplate(
   H: number,
   d: ProfileCardData,
   c: CardCustomization,
-  theme: (typeof THEMES)["plum"],
+  theme: CardPalette,
   icon: HTMLImageElement | null,
   photo: HTMLImageElement | null
 ) {
@@ -553,7 +551,7 @@ async function renderFestivalTemplate(
   H: number,
   d: ProfileCardData,
   c: CardCustomization,
-  theme: (typeof THEMES)["plum"],
+  theme: CardPalette,
   icon: HTMLImageElement | null,
   photo: HTMLImageElement | null
 ) {
@@ -750,69 +748,177 @@ export async function drawProfileCard(d: ProfileCardData): Promise<"shared" | "d
   return "downloaded";
 }
 
-/** Legacy support: Invite card generator */
-export async function drawInviteCard(code: string, url: string): Promise<"shared" | "downloaded"> {
+/**
+ * Shareable Invitation Story Artwork Generator
+ * Designed strictly for 1080 × 1920 Instagram Story / WhatsApp Status
+ */
+export async function renderInviteStoryCard(
+  canvas: HTMLCanvasElement,
+  options: {
+    code: string;
+    url: string;
+    senderName?: string | null;
+    photoUrl?: string | null;
+  }
+): Promise<void> {
   await loadFonts();
   const W = 1080;
-  const H = 1350;
-  const canvas = document.createElement("canvas");
+  const H = 1920;
   canvas.width = W;
   canvas.height = H;
   const ctx = canvas.getContext("2d")!;
 
-  const g = ctx.createLinearGradient(0, 0, 0, H);
-  g.addColorStop(0, "#260E27");
-  g.addColorStop(1, "#120514");
-  ctx.fillStyle = g;
+  // 1. Deep festival atmosphere gradient
+  const bgGrad = ctx.createLinearGradient(0, 0, 0, H);
+  bgGrad.addColorStop(0, "#260E27");
+  bgGrad.addColorStop(0.5, "#17061A");
+  bgGrad.addColorStop(1, "#0D030F");
+  ctx.fillStyle = bgGrad;
   ctx.fillRect(0, 0, W, H);
 
-  const icon = await loadImgSafe(appIcon);
+  // Festive radial glow
+  const glow = ctx.createRadialGradient(W / 2, 540, 50, W / 2, 540, 600);
+  glow.addColorStop(0, "rgba(255, 158, 59, 0.20)");
+  glow.addColorStop(0.6, "rgba(235, 94, 40, 0.06)");
+  glow.addColorStop(1, "rgba(0, 0, 0, 0)");
+  ctx.fillStyle = glow;
+  ctx.fillRect(0, 0, W, H);
 
-  if (icon) {
-    const s = 280;
+  const [icon, photo] = await Promise.all([
+    loadImgSafe(appIcon),
+    options.photoUrl ? loadImgSafe(options.photoUrl) : null,
+  ]);
+
+  // Top festival badge
+  ctx.textAlign = "center";
+  ctx.fillStyle = "#FF9E3B";
+  ctx.font = '800 28px "Plus Jakarta Sans", sans-serif';
+  ctx.fillText("NAVRATRI 2026 · AFTER9 INVITATION", W / 2, 220);
+
+  // App icon or sender avatar
+  if (photo) {
+    const s = 220;
     ctx.save();
-    roundRect(ctx, (W - s) / 2, 180, s, s, 64);
+    roundRect(ctx, (W - s) / 2, 280, s, s, 110);
     ctx.clip();
-    ctx.drawImage(icon, (W - s) / 2, 180, s, s);
+    ctx.drawImage(photo, (W - s) / 2, 280, s, s);
+    ctx.restore();
+    ctx.strokeStyle = "#FF9E3B";
+    ctx.lineWidth = 4;
+    roundRect(ctx, (W - s) / 2, 280, s, s, 110);
+    ctx.stroke();
+  } else if (icon) {
+    const s = 190;
+    ctx.save();
+    roundRect(ctx, (W - s) / 2, 290, s, s, 48);
+    ctx.clip();
+    ctx.drawImage(icon, (W - s) / 2, 290, s, s);
     ctx.restore();
   }
 
-  ctx.textAlign = "center";
+  // Personalization header
+  if (options.senderName) {
+    ctx.fillStyle = "rgba(250, 244, 234, 0.85)";
+    ctx.font = '600 36px "Plus Jakarta Sans", sans-serif';
+    ctx.fillText(`${options.senderName} invited you`, W / 2, 560);
+  }
+
+  // Main Headline
   ctx.fillStyle = "#FAF4EA";
-  ctx.font = "800 110px Syne, sans-serif";
-  ctx.fillText("AFTER9", W / 2, 600);
-
-  ctx.fillStyle = "#FF9E3B";
-  ctx.font = '600 40px "Plus Jakarta Sans", sans-serif';
-  ctx.fillText("Meet on the floor. Stay after.", W / 2, 680);
-
-  // Code pill
   ctx.font = "800 84px Syne, sans-serif";
-  const codeW = ctx.measureText(code).width + 140;
-  roundRect(ctx, (W - codeW) / 2, 770, codeW, 150, 75);
-  ctx.strokeStyle = "#FF9E3B";
-  ctx.lineWidth = 4;
-  ctx.stroke();
-  ctx.fillStyle = "#FAF4EA";
-  ctx.fillText(code, W / 2, 875);
-
-  ctx.fillStyle = "rgba(250, 244, 234, 0.75)";
-  ctx.font = '500 36px "Plus Jakarta Sans", sans-serif';
-  ctx.fillText("Join me on After9 for Navratri", W / 2, 1020);
+  const hlY = options.senderName ? 670 : 600;
+  ctx.fillText("Your Garba nights", W / 2, hlY);
   ctx.fillStyle = "#FF9E3B";
-  ctx.font = '600 40px "Plus Jakarta Sans", sans-serif';
-  ctx.fillText(url.replace(/^https?:\/\//, "").replace(/[&]src=card$/, ""), W / 2, 1090);
+  ctx.fillText("need a better crew.", W / 2, hlY + 95);
+
+  // Supporting Text
+  ctx.fillStyle = "rgba(250, 244, 234, 0.78)";
+  ctx.font = '500 36px "Plus Jakarta Sans", sans-serif';
+  const supY = hlY + 220;
+  ctx.fillText("Find your people, plan your nights and make", W / 2, supY);
+  ctx.fillText("Navratri more memorable with After9.", W / 2, supY + 54);
+
+  // Centerpiece Invitation Card Box
+  const cardBoxW = 880;
+  const cardBoxH = 340;
+  const cardBoxX = (W - cardBoxW) / 2;
+  const cardBoxY = supY + 120;
+
+  ctx.save();
+  roundRect(ctx, cardBoxX, cardBoxY, cardBoxW, cardBoxH, 36);
+  ctx.fillStyle = "rgba(255, 255, 255, 0.05)";
+  ctx.fill();
+  ctx.strokeStyle = "rgba(255, 158, 59, 0.4)";
+  ctx.lineWidth = 3;
+  ctx.stroke();
+  ctx.restore();
+
+  // Call to Action inside box
+  ctx.fillStyle = "#FF9E3B";
+  ctx.font = '800 32px "Plus Jakarta Sans", sans-serif';
+  ctx.fillText("EXCLUSIVE COMMUNITY PASS", W / 2, cardBoxY + 70);
+
+  // Referral Code Pill
+  ctx.fillStyle = "#FAF4EA";
+  ctx.font = "800 92px Syne, sans-serif";
+  ctx.fillText(options.code, W / 2, cardBoxY + 180);
+
+  ctx.fillStyle = "rgba(250, 244, 234, 0.65)";
+  ctx.font = '600 30px "Plus Jakarta Sans", sans-serif';
+  ctx.fillText("TAP LINK OR SCAN TO JOIN", W / 2, cardBoxY + 270);
+
+  // Primary Call to Action Button
+  const btnW = 720;
+  const btnH = 110;
+  const btnX = (W - btnW) / 2;
+  const btnY = cardBoxY + cardBoxH + 60;
+
+  ctx.save();
+  roundRect(ctx, btnX, btnY, btnW, btnH, 55);
+  ctx.fillStyle = "#FF9E3B";
+  ctx.fill();
+  ctx.restore();
+
+  ctx.fillStyle = "#120514";
+  ctx.font = '800 42px "Plus Jakarta Sans", sans-serif';
+  ctx.fillText("Join me on After9 →", W / 2, btnY + 70);
+
+  // Link URL
+  const cleanUrl = options.url.replace(/^https?:\/\//, "").replace(/[&?]src=.*$/, "");
+  ctx.fillStyle = "rgba(250, 244, 234, 0.70)";
+  ctx.font = '600 32px "Plus Jakarta Sans", sans-serif';
+  ctx.fillText(cleanUrl, W / 2, btnY + btnH + 60);
+
+  // Bottom Brand Signature
+  ctx.fillStyle = "rgba(250, 244, 234, 0.45)";
+  ctx.font = '500 28px "Plus Jakarta Sans", sans-serif';
+  ctx.fillText("After9 · Meet on the floor. Stay after.", W / 2, H - 120);
+}
+
+/** Legacy & Component helper: Generate and export/share the invitation story artwork */
+export async function drawInviteCard(
+  code: string,
+  url: string,
+  extra?: { senderName?: string | null; photoUrl?: string | null }
+): Promise<"shared" | "downloaded"> {
+  const canvas = document.createElement("canvas");
+  await renderInviteStoryCard(canvas, {
+    code,
+    url,
+    senderName: extra?.senderName,
+    photoUrl: extra?.photoUrl,
+  });
 
   const blob = await new Promise<Blob | null>((r) => canvas.toBlob(r, "image/png"));
   if (!blob) throw new Error("Couldn't create the image.");
   const file = new File([blob], `after9-invite-${code}.png`, { type: "image/png" });
 
-  if (navigator.canShare?.({ files: [file] })) {
+  if (typeof navigator !== "undefined" && navigator.canShare?.({ files: [file] })) {
     try {
       await navigator.share({
         files: [file],
-        title: "After9 invite",
-        text: `Join me on After9 — ${url}`,
+        title: "After9 — Your Garba crew starts here",
+        text: `Find your people, plan your nights and join me on After9: ${url}`,
       });
       return "shared";
     } catch {

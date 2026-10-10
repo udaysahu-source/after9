@@ -669,6 +669,57 @@ export type Database = {
           },
         ]
       }
+      security_rate_limits: {
+        Row: {
+          key: string
+          count: number
+          reset_at: string
+          created_at: string
+        }
+        Insert: {
+          key: string
+          count?: number
+          reset_at: string
+          created_at?: string
+        }
+        Update: {
+          key?: string
+          count?: number
+          reset_at?: string
+          created_at?: string
+        }
+        Relationships: []
+      }
+      security_events: {
+        Row: {
+          id: string
+          event_type: string
+          severity: "info" | "warn" | "critical"
+          actor_id: string | null
+          ip_hash: string | null
+          metadata: Json
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          event_type: string
+          severity?: "info" | "warn" | "critical"
+          actor_id?: string | null
+          ip_hash?: string | null
+          metadata?: Json
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          event_type?: string
+          severity?: "info" | "warn" | "critical"
+          actor_id?: string | null
+          ip_hash?: string | null
+          metadata?: Json
+          created_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
@@ -716,6 +767,27 @@ export type Database = {
       }
       track_launch_event: {
         Args: { event_name: string; properties?: Json }
+        Returns: undefined
+      }
+      check_rate_limit: {
+        Args: {
+          p_key: string
+          p_max_attempts: number
+          p_window_seconds: number
+        }
+        Returns: {
+          allowed: boolean
+          remaining: number
+          reset_in_seconds: number
+        }
+      }
+      log_security_event: {
+        Args: {
+          p_event_type: string
+          p_severity?: string
+          p_ip_hash?: string
+          p_metadata?: Json
+        }
         Returns: undefined
       }
       get_launch_analytics: {

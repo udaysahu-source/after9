@@ -86,13 +86,16 @@ describe("Raipur Garba Events 2026 Dataset & Business Logic", () => {
     });
   });
 
-  it("ensures initial publication status keeps pending_review events in draft", () => {
+  it("ensures all 35 events are published for public app discovery with verification badges", () => {
     const published = GARBA_EVENTS_2026.filter((e) => e.publication_status === "published");
-    const drafts = GARBA_EVENTS_2026.filter((e) => e.publication_status === "draft");
+    const verified = GARBA_EVENTS_2026.filter((e) => e.verification_status === "verified");
+    const pendingVerification = GARBA_EVENTS_2026.filter((e) => e.verification_status === "pending_verification");
 
-    // Exactly 3 verified / listed events published, 32 pending review kept as drafts
-    expect(published).toHaveLength(3);
-    expect(drafts).toHaveLength(32);
+    // All 35 events are published for attendee discovery
+    expect(published).toHaveLength(35);
+    // 3 verified listings, 32 pending verification listings
+    expect(verified).toHaveLength(3);
+    expect(pendingVerification).toHaveLength(32);
   });
 
   it("preserves poster content notes and verification notes for admin inspection", () => {

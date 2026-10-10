@@ -57,7 +57,7 @@ export const GARBA_EVENTS_2026: PlanEventItem[] = [
     "poster_content_notes": "Samta Colony Raas Garba Utsav 2026; 11–19 Oct 2026; Bhaisthan/Balsthan Maidan, Amaseoni Chowk, Samta Colony, Raipur. Poster lists Subodh Haritwal, Gaurav Singh (Shanky), Bhavesh Shukla, Abhishek Singh (Hani) and Madhur Parakh.",
     "verification_notes": "User-provided posters use Balsthan/Bhaisthan spelling variants; confirm official venue name.",
     "verification_status": "pending_verification",
-    "publication_status": "draft"
+    "publication_status": "published"
   },
   {
     "id": "0d209445-922c-4792-a8b5-f9edaed11f98",
@@ -110,7 +110,7 @@ export const GARBA_EVENTS_2026: PlanEventItem[] = [
     "poster_content_notes": "Rajdhani Raasgarba Utsav 2026; 11–19 Oct 2026; Avadhpuri Maidan, Hanuman Mandir Trust, Shrinagar, Gudhiyari, Raipur.",
     "verification_notes": "Poster-derived; confirm details",
     "verification_status": "pending_verification",
-    "publication_status": "draft"
+    "publication_status": "published"
   },
   {
     "id": "31dd4b8f-3640-4bef-a075-feca568b445d",
@@ -162,7 +162,7 @@ export const GARBA_EVENTS_2026: PlanEventItem[] = [
     "poster_content_notes": "User-provided free poster. Do not attach an Instagram handle to this image.",
     "verification_notes": "Poster/public report; confirm entry details",
     "verification_status": "pending_verification",
-    "publication_status": "draft"
+    "publication_status": "published"
   },
   {
     "id": "4cb6eeb6-6b92-475a-a142-101d746e9e97",
@@ -206,7 +206,7 @@ export const GARBA_EVENTS_2026: PlanEventItem[] = [
     "poster_content_notes": null,
     "verification_notes": "Poster-derived; dates need confirmation",
     "verification_status": "pending_verification",
-    "publication_status": "draft"
+    "publication_status": "published"
   },
   {
     "id": "303ba15e-e6e2-4ac6-a960-ebdf2eae115a",
@@ -252,7 +252,7 @@ export const GARBA_EVENTS_2026: PlanEventItem[] = [
     "poster_content_notes": "Royal Garba Season 1; 11–13 Oct 2026; Hotel Royal Castle, Saddu, Vidhan Sabha Road, Raipur.",
     "verification_notes": "Poster-derived; confirm passes",
     "verification_status": "pending_verification",
-    "publication_status": "draft"
+    "publication_status": "published"
   },
   {
     "id": "c05f0084-be90-48a6-a83c-09e2acd35079",
@@ -305,7 +305,7 @@ export const GARBA_EVENTS_2026: PlanEventItem[] = [
     "poster_content_notes": "Kabir Nagar Utsav Seva Samiti Garba; 11–18 Oct 2026; Cricket Ground, opposite Police Station, Kabir Nagar, Raipur. Poster also advertises Shehnaz Akhtar Bhajan Sandhya on 19 Oct; contact 7000656161 / 7566665557 / 7974897276.",
     "verification_notes": "Poster-derived; contact organiser for entry",
     "verification_status": "pending_verification",
-    "publication_status": "draft"
+    "publication_status": "published"
   },
   {
     "id": "6842be78-eb67-4cd4-a13e-91ad1554eddf",
@@ -357,7 +357,7 @@ export const GARBA_EVENTS_2026: PlanEventItem[] = [
     "poster_content_notes": "User-provided free poster. Do not attach an Instagram handle to this image.",
     "verification_notes": "Confirmed in user-provided posters and 9 Oct 2026 roundup; pass details not found.",
     "verification_status": "pending_verification",
-    "publication_status": "draft"
+    "publication_status": "published"
   },
   {
     "id": "81176840-1a47-47e7-a9d1-96a9ad9edd9e",
@@ -409,7 +409,7 @@ export const GARBA_EVENTS_2026: PlanEventItem[] = [
     "poster_content_notes": "Gudhiyari Raas Garba 2026; 12–19 Oct 2026; Maruti Mangalam Bhawan, Gudhiyari, Raipur.",
     "verification_notes": "Poster-derived; confirm passes",
     "verification_status": "pending_verification",
-    "publication_status": "draft"
+    "publication_status": "published"
   },
   {
     "id": "c97c7114-3ced-4218-a79e-c8b885cd3164",
@@ -458,7 +458,7 @@ export const GARBA_EVENTS_2026: PlanEventItem[] = [
     "poster_content_notes": null,
     "verification_notes": "Poster-derived; confirm exact venue",
     "verification_status": "pending_verification",
-    "publication_status": "draft"
+    "publication_status": "published"
   },
   {
     "id": "d8d94340-34cd-41ed-a1a0-fec8354e35f3",
@@ -508,7 +508,7 @@ export const GARBA_EVENTS_2026: PlanEventItem[] = [
     "poster_content_notes": "Asian News Raas Garba Season 4; 14–19 Oct 2026; in front of Ram Mandir, Ram Bagh, VIP Road, TeliBandha, Raipur.",
     "verification_notes": "Poster and public event page indicate 14–19 Oct. Public reports advertised free-pass collection; reconfirm collection dates and stock.",
     "verification_status": "pending_verification",
-    "publication_status": "draft"
+    "publication_status": "published"
   },
   {
     "id": "60d14760-9c9c-453f-a683-2b7a7c14f439",
@@ -560,7 +560,7 @@ export const GARBA_EVENTS_2026: PlanEventItem[] = [
     "poster_content_notes": null,
     "verification_notes": "Conflicting dates: Raipur Tak/WhatsUpRaipur poster says 14 Oct; The Local Tube carousel says 16–18 Oct; 9 Oct roundup says 11–19 Oct. Confirm with venue/organiser before publishing dates.",
     "verification_status": "pending_verification",
-    "publication_status": "draft"
+    "publication_status": "published"
   },
   {
     "id": "509550ef-df0e-4e23-a830-991cd3bacc6b",
@@ -653,7 +653,7 @@ export const GARBA_EVENTS_2026: PlanEventItem[] = [
     "poster_content_notes": null,
     "verification_notes": "Poster-derived; confirm passes",
     "verification_status": "pending_verification",
-    "publication_status": "draft"
+    "publication_status": "published"
   },
   {
     "id": "aef7c50e-a017-4b96-a626-b485d541aef9",
@@ -702,7 +702,7 @@ export const GARBA_EVENTS_2026: PlanEventItem[] = [
     "poster_content_notes": "Raipur Raas Garba; 15–19 Oct 2026; Ambuja Mall, Raipur; poster lists pass contacts 88717 37121 and 98279 30008.",
     "verification_notes": "Poster-derived; no verified online checkout found",
     "verification_status": "pending_verification",
-    "publication_status": "draft"
+    "publication_status": "published"
   },
   {
     "id": "d9c4fa8e-bd24-4e82-ab61-fff106d337a5",
@@ -747,7 +747,7 @@ export const GARBA_EVENTS_2026: PlanEventItem[] = [
     "poster_content_notes": "Reeti — A Night of Garba; 15 Oct 2026; Iraa Lawn, Swarnabhoomi, Raipur; by Gunesha Events. Handle is the organiser's shown profile, not necessarily a dedicated event account.",
     "verification_notes": "Poster-derived; confirm entry",
     "verification_status": "pending_verification",
-    "publication_status": "draft"
+    "publication_status": "published"
   },
   {
     "id": "55cac14b-76cd-4d15-affc-38cec96164ef",
@@ -792,7 +792,7 @@ export const GARBA_EVENTS_2026: PlanEventItem[] = [
     "poster_content_notes": null,
     "verification_notes": "Poster-derived; confirm event/pass details",
     "verification_status": "pending_verification",
-    "publication_status": "draft"
+    "publication_status": "published"
   },
   {
     "id": "f7a8657a-6092-4e97-a7b3-505c8cd7baf8",
@@ -840,7 +840,7 @@ export const GARBA_EVENTS_2026: PlanEventItem[] = [
     "poster_content_notes": "Rangila Raas Season 3; 16–19 Oct 2026; Balbir Singh Juneja Indoor Stadium, Raipur. Instagram profile lists a registration form; verify before linking.",
     "verification_notes": "User-provided posters list Indoor Stadium, Budhapara, 16–19 Oct; title 'Rangila Raas Season 3' is from earlier poster notes. Confirm official event title.",
     "verification_status": "pending_verification",
-    "publication_status": "draft"
+    "publication_status": "published"
   },
   {
     "id": "87aed0b5-ef00-403d-ad7c-c0a27dd66bc6",
@@ -888,7 +888,7 @@ export const GARBA_EVENTS_2026: PlanEventItem[] = [
     "poster_content_notes": "Dholida 2026; 16–19 Oct 2026; Amara Zora Ground, Raipur; poster advertises Kangana Ranaut and singer Sunil Lodhi—confirm appearances with organiser.",
     "verification_notes": "Poster-derived; verify advertised guest details",
     "verification_status": "pending_verification",
-    "publication_status": "draft"
+    "publication_status": "published"
   },
   {
     "id": "cccaa254-2890-4a94-a693-e2939232661d",
@@ -934,7 +934,7 @@ export const GARBA_EVENTS_2026: PlanEventItem[] = [
     "poster_content_notes": null,
     "verification_notes": "Poster-derived; confirm entry",
     "verification_status": "pending_verification",
-    "publication_status": "draft"
+    "publication_status": "published"
   },
   {
     "id": "734e1cea-bde6-4f4a-aaf7-91ddeb05ea8d",
@@ -981,7 +981,7 @@ export const GARBA_EVENTS_2026: PlanEventItem[] = [
     "poster_content_notes": "Floating Garba Night at Entartica; 16–18 Oct 2026; 6 PM–11 PM; contact +91 94296 91418 for passes/packages.",
     "verification_notes": "Poster-derived; official site does not by itself verify 2026 passes",
     "verification_status": "pending_verification",
-    "publication_status": "draft"
+    "publication_status": "published"
   },
   {
     "id": "059f414b-1940-4e09-ac74-7ab2b3a218d9",
@@ -1029,7 +1029,7 @@ export const GARBA_EVENTS_2026: PlanEventItem[] = [
     "poster_content_notes": "Raipur Raas 5.0; 16–17 Oct 2026; Babylon International, VIP Road; AC indoor venue; family friendly; safe, secure and well managed.",
     "verification_notes": "Poster-derived; confirm details",
     "verification_status": "pending_verification",
-    "publication_status": "draft"
+    "publication_status": "published"
   },
   {
     "id": "f759fad0-061e-484f-a250-f01befba3f78",
@@ -1077,7 +1077,7 @@ export const GARBA_EVENTS_2026: PlanEventItem[] = [
     "poster_content_notes": "Maa Aarna Raas Garba 2.0; 16–19 Oct 2026; The Grand Neelam Hotel, VIP Road, Raipur; 4 days, 4 themes. Instagram handle is Sadhna News shown adjacent in the PDF, not a verified dedicated Maa Aarna account.",
     "verification_notes": "Poster-derived; merge with generic Grand Neelam listing if same event",
     "verification_status": "pending_verification",
-    "publication_status": "draft"
+    "publication_status": "published"
   },
   {
     "id": "9f949f43-2b16-44e9-aa49-8a534cd330e9",
@@ -1121,7 +1121,7 @@ export const GARBA_EVENTS_2026: PlanEventItem[] = [
     "poster_content_notes": null,
     "verification_notes": "Poster-derived; confirm if public event",
     "verification_status": "pending_verification",
-    "publication_status": "draft"
+    "publication_status": "published"
   },
   {
     "id": "8f2f7dca-1a58-460b-a648-28e937eb1280",
@@ -1213,7 +1213,7 @@ export const GARBA_EVENTS_2026: PlanEventItem[] = [
     "poster_content_notes": "Neon Raas 1.0; 17 Oct 2026; Rosebay Resort, Ama Seoni; presented by Rotary Club of Raipur Cosmo Divas.",
     "verification_notes": "Updated to 17 Oct based on user-provided Raipur Tak/WhatsUpRaipur posters; another roundup gives a conflicting date. Confirm with organiser.",
     "verification_status": "pending_verification",
-    "publication_status": "draft"
+    "publication_status": "published"
   },
   {
     "id": "71a83f0d-66e8-4b05-a786-ecd34523d178",
@@ -1258,7 +1258,7 @@ export const GARBA_EVENTS_2026: PlanEventItem[] = [
     "poster_content_notes": null,
     "verification_notes": "Poster-derived; confirm organiser and entry",
     "verification_status": "pending_verification",
-    "publication_status": "draft"
+    "publication_status": "published"
   },
   {
     "id": "222e3c95-93e0-42e8-a252-cde05b6ac274",
@@ -1359,7 +1359,7 @@ export const GARBA_EVENTS_2026: PlanEventItem[] = [
     "poster_content_notes": "Rangilo Raas Garba; 15–19 Oct 2026; 8 PM onwards; Jainam Manas Samiti Bhavan, opposite Airport, Raipur; no stag entry; traditional dresses only; social cause: Arpan Divyang Public School.",
     "verification_notes": "Updated from user-provided WhatsUpRaipur poster and 9 Oct 2026 roundup; poster says opposite Airport. Confirm entry rules and passes.",
     "verification_status": "pending_verification",
-    "publication_status": "draft"
+    "publication_status": "published"
   },
   {
     "id": "bdc3358b-9f3d-4f0d-abc4-e3666501707b",
@@ -1411,7 +1411,7 @@ export const GARBA_EVENTS_2026: PlanEventItem[] = [
     "poster_content_notes": null,
     "verification_notes": "Shown in user-provided The Local Tube carousel and WhatsUpRaipur poster; venue/date still need organiser confirmation.",
     "verification_status": "pending_verification",
-    "publication_status": "draft"
+    "publication_status": "published"
   },
   {
     "id": "83087e8f-777d-4b40-a783-a5d09b968def",
@@ -1463,7 +1463,7 @@ export const GARBA_EVENTS_2026: PlanEventItem[] = [
     "poster_content_notes": null,
     "verification_notes": "Shown in user-provided The Local Tube carousel; confirm event and dates before publishing.",
     "verification_status": "pending_verification",
-    "publication_status": "draft"
+    "publication_status": "published"
   },
   {
     "id": "c7b3b580-ed96-4ecf-a957-4665dfdbfbe3",
@@ -1508,7 +1508,7 @@ export const GARBA_EVENTS_2026: PlanEventItem[] = [
     "poster_content_notes": null,
     "verification_notes": "Related Navratri programme; not a Garba-only event",
     "verification_status": "pending_verification",
-    "publication_status": "draft"
+    "publication_status": "published"
   },
   {
     "id": "31ce368d-a27d-4096-a2bb-27a7de9c411d",
@@ -1553,7 +1553,7 @@ export const GARBA_EVENTS_2026: PlanEventItem[] = [
     "poster_content_notes": null,
     "verification_notes": "New listing on FindYourVibe says Raipur, 18–19 Oct; exact venue, organiser, price and pass link not clear. Keep hidden until verified.",
     "verification_status": "pending_verification",
-    "publication_status": "draft"
+    "publication_status": "published"
   },
   {
     "id": "c9f8525e-22dd-44ff-ab5e-4109de9c0383",
@@ -1604,7 +1604,7 @@ export const GARBA_EVENTS_2026: PlanEventItem[] = [
     "poster_content_notes": null,
     "verification_notes": "New listing on FindYourVibe says Gudhiyari, 12–19 Oct; could overlap with Maruti Mangalam/Gudhiyari event. Verify whether this is a separate event before creating a public duplicate.",
     "verification_status": "pending_verification",
-    "publication_status": "draft"
+    "publication_status": "published"
   },
   {
     "id": "01e0a21a-d59c-419b-a8c4-90cb3548e26a",
@@ -1650,7 +1650,7 @@ export const GARBA_EVENTS_2026: PlanEventItem[] = [
     "poster_content_notes": null,
     "verification_notes": "New listing on FindYourVibe says Raipur, 17–19 Oct; venue, organiser, price and booking link need confirmation.",
     "verification_status": "pending_verification",
-    "publication_status": "draft"
+    "publication_status": "published"
   },
   {
     "id": "feeb2224-eed5-4c85-ad1e-52f2bc8eca61",
@@ -1697,6 +1697,6 @@ export const GARBA_EVENTS_2026: PlanEventItem[] = [
     "poster_content_notes": null,
     "verification_notes": "Public event website advertises 13–15 Oct and ₹349 onwards, but venue/city could not be reliably established. Keep hidden until organiser confirms this is the Raipur event.",
     "verification_status": "pending_verification",
-    "publication_status": "draft"
+    "publication_status": "published"
   }
 ];

@@ -98,7 +98,7 @@ function PlanPage() {
 
   const [activeTab, setActiveTab] = useState<"discover" | "itinerary">("discover");
   const [city, setCity] = useState("Raipur");
-  const [selectedDate, setSelectedDate] = useState<string | null>("2026-10-11");
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [selectedArea, setSelectedArea] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");

@@ -5,6 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { usePhotoUrls, type FeedRow } from "@/lib/after9";
 import type { Database } from "@/integrations/supabase/types";
 import { NotificationBell } from "@/components/notifications-popover";
+import { Instagram } from "lucide-react";
 
 type Match = Database["public"]["Functions"]["my_matches"]["Returns"][number];
 
@@ -110,8 +111,9 @@ function Matches() {
                     {p.last_message ?? <span className="text-action italic">New clash · say hi</span>}
                   </p>
                 </div>
-                <div className="shrink-0 rounded-full bg-action/10 p-2 text-action transition-transform duration-200 group-hover:scale-110 group-hover:bg-action group-hover:text-action-foreground">
-                  <ChatIcon className="h-5 w-5" />
+                <div className="shrink-0 flex items-center gap-1.5 rounded-full bg-action/10 px-3 py-1.5 text-action transition-all duration-200 group-hover:bg-action group-hover:text-action-foreground shadow-2xs">
+                  <Instagram className="h-4 w-4" />
+                  <span className="text-xs font-bold">Connect</span>
                 </div>
               </Link>
             ))}

@@ -27,6 +27,8 @@ import { claimInvite } from "@/lib/invites.functions";
 import { SocialLinksManager } from "@/components/social-links-manager";
 import { Analytics } from "@/lib/launch-analytics";
 import { toast } from "sonner";
+import { Camera, ShieldCheck } from "lucide-react";
+import { PhotoVerificationModal } from "@/components/photo-verification-modal";
 
 export const Route = createFileRoute("/_authenticated/onboarding")({
   head: () => ({
@@ -183,6 +185,8 @@ function Step({
   const [photo, setPhoto] = useState<{ path: string | null; preview?: string }>({
     path: p.photo_path,
   });
+  const [liveVerificationOpen, setLiveVerificationOpen] = useState(false);
+  const [verifiedStatus, setVerifiedStatus] = useState<string | null>(p.verification_status ?? null);
   const [nights, setNights] = useState((p.nights ?? {}) as Record<string, Attendance>);
   const urls = usePhotoUrls([photo.path]);
 
@@ -409,8 +413,33 @@ function Step({
           <PhotoPicker
             userId={p.id}
             url={photo.preview ?? (photo.path ? urls[photo.path] : undefined)}
-            onUploaded={(path, preview) => setPhoto({ path, preview })}
+            onUploaded={(path, preview) => {
+              setPhoto({ path, preview });
+              setLiveVerificationOpen(true);
+            }}
+            onRequestVerification={() => setLiveVerificationOpen(true)}
           />
+
+          {photo.path && (
+            <div className="mt-3">
+              {verifiedStatus === "approved" ? (
+                <div className="flex items-center justify-center gap-1.5 rounded-xl border border-teal-500/30 bg-teal-500/10 p-2.5 text-xs font-bold text-teal-700 dark:text-teal-300 animate-fade-in">
+                  <ShieldCheck className="h-4 w-4" /> Live face match verified!
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setLiveVerificationOpen(true)}
+                  className="flex w-full items-center justify-between rounded-xl border border-action/40 bg-action/10 px-3 py-2 text-xs font-semibold text-action hover:bg-action/20 transition shadow-xs"
+                >
+                  <span className="flex items-center gap-1.5">
+                    <Camera className="h-4 w-4" /> Check face match with camera
+                  </span>
+                  <span className="font-bold underline">Verify Now</span>
+                </button>
+              )}
+            </div>
+          )}
         </div>
 
         <div>
@@ -440,6 +469,15 @@ function Step({
       >
         Complete & Enter Festival Floor ✨
       </Btn>
+
+      <PhotoVerificationModal
+        open={liveVerificationOpen}
+        onOpenChange={setLiveVerificationOpen}
+        profilePhotoUrl={photo.preview ?? (photo.path ? urls[photo.path] ?? null : null)}
+        onVerificationComplete={(status) => {
+          setVerifiedStatus(status);
+        }}
+      />
     </>
   );
 }

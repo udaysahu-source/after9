@@ -37,7 +37,6 @@ function Chat() {
   const [me, setMe] = useState<string>("");
   const [other, setOther] = useState<Match | null | undefined>(undefined);
   const [msgs, setMsgs] = useState<Msg[]>([]);
-  const [matchedSocials, setMatchedSocials] = useState<{ platform: string; handle: string; profile_url: string }[]>([]);
   const [t, setT] = useState("");
   const [menu, setMenu] = useState(false);
 
@@ -65,9 +64,6 @@ function Chat() {
         .order("created_at", { ascending: true })
         .limit(100);
       setMsgs(rows ?? []);
-      // Load matched socials guarded by database-level mutual consent
-      const { data: socs } = await supabase.rpc("get_matched_socials", { target_user_id: id });
-      setMatchedSocials((socs ?? []) as { platform: string; handle: string; profile_url: string }[]);
       // Clear unread notifications for this chat
       supabase.from("notifications").update({ read: true }).eq("user_id", uid).eq("action_url", `/chat/${id}`);
     });

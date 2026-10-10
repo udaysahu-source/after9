@@ -10,6 +10,7 @@ import {
   openInstagramProfile,
   type InstagramExchangeState,
 } from "@/lib/instagram-match";
+import { validateAndNormalizeSocial } from "@/lib/social-links";
 import { cn } from "@/lib/utils";
 import {
   Instagram,
@@ -214,22 +215,17 @@ export function MatchCommunicationScreen({
           </div>
         </div>
 
-        {/* Clear Explanation Box */}
+        {/* Concise Reassurance Badge */}
         <div
           className={cn(
-            "rounded-2xl border p-3.5 text-left mb-4",
+            "inline-flex items-center justify-center gap-1.5 rounded-full px-3.5 py-1 text-[11px] font-medium mb-3.5",
             isFullscreen
-              ? "border-white/15 bg-white/5 backdrop-blur-xs text-primary-foreground/90"
-              : "border-border/70 bg-muted/40 text-muted-foreground"
+              ? "border border-white/15 bg-white/10 text-primary-foreground/90 backdrop-blur-xs"
+              : "border border-border/70 bg-muted/50 text-muted-foreground"
           )}
         >
-          <div className="flex items-center gap-2 font-semibold text-xs text-action mb-1">
-            <Lock className="h-3.5 w-3.5 shrink-0" />
-            <span>Instagram sharing is 100% optional</span>
-          </div>
-          <p className="text-[12px] leading-relaxed">
-            Your handle is never made public. Handles are only exchanged when <b>both of you</b> choose to connect on Instagram.
-          </p>
+          <Lock className="h-3 w-3 text-action shrink-0" />
+          <span>Instagram sharing is optional · Private until you both agree</span>
         </div>
 
         {/* PRIMARY ACTION SECTION: INSTAGRAM */}
@@ -360,6 +356,19 @@ export function MatchCommunicationScreen({
                   className="h-10 w-full rounded-xl border border-border bg-background px-3 font-mono text-sm outline-none focus:border-action"
                 />
               </div>
+              {inputHandle.trim() && (
+                <div className="text-[11px]">
+                  {validateAndNormalizeSocial("instagram", inputHandle).valid ? (
+                    <span className="font-medium text-emerald-600 dark:text-emerald-400">
+                      ✓ Valid: @{validateAndNormalizeSocial("instagram", inputHandle).handle}
+                    </span>
+                  ) : (
+                    <span className="font-medium text-destructive">
+                      {validateAndNormalizeSocial("instagram", inputHandle).error}
+                    </span>
+                  )}
+                </div>
+              )}
               <div className="flex items-center justify-end gap-2 pt-1">
                 <button
                   type="button"
@@ -370,7 +379,7 @@ export function MatchCommunicationScreen({
                 </button>
                 <button
                   type="button"
-                  disabled={savingHandle || !inputHandle.trim()}
+                  disabled={savingHandle || !inputHandle.trim() || !validateAndNormalizeSocial("instagram", inputHandle).valid}
                   onClick={handleSaveAndShareHandle}
                   className="flex items-center gap-1.5 rounded-xl bg-[#E1306C] px-4 py-2 text-xs font-bold text-white hover:opacity-90 disabled:opacity-50"
                 >
@@ -423,46 +432,46 @@ export function MatchCommunicationScreen({
           </Link>
 
           {/* ALTERNATIVE ACTION: IN-APP CHAT (Retained as alternative) */}
-          <div className="flex items-center justify-center gap-3 pt-2 text-xs">
-            {onOpenChat ? (
-              <button
-                type="button"
-                onClick={onOpenChat}
-                className={cn(
-                  "inline-flex items-center gap-1.5 font-semibold transition hover:underline",
-                  isFullscreen ? "text-primary-foreground/75 hover:text-white" : "text-muted-foreground hover:text-foreground"
-                )}
-              >
-                <MessageCircle className="h-3.5 w-3.5" />
-                <span>Or use in-app chat</span>
-              </button>
-            ) : (
-              <Link
-                to="/chat/$id"
-                params={{ id: partner.id }}
-                className={cn(
-                  "inline-flex items-center gap-1.5 font-semibold transition hover:underline",
-                  isFullscreen ? "text-primary-foreground/75 hover:text-white" : "text-muted-foreground hover:text-foreground"
-                )}
-              >
-                <MessageCircle className="h-3.5 w-3.5" />
-                <span>Or use in-app chat</span>
-              </Link>
-            )}
-
-            {isFullscreen && onClose && (
-              <>
-                <span className="opacity-40">·</span>
+          {isFullscreen ? (
+            <div className="flex items-center justify-center gap-3 pt-2 text-xs">
+              {onOpenChat ? (
                 <button
                   type="button"
-                  onClick={onClose}
-                  className="font-semibold text-primary-foreground/75 hover:text-white transition"
+                  onClick={onOpenChat}
+                  className="inline-flex items-center gap-1.5 font-semibold text-primary-foreground/80 hover:text-white transition"
                 >
-                  Keep discovering
+                  <MessageCircle className="h-3.5 w-3.5" />
+                  <span>Or use in-app chat</span>
                 </button>
-              </>
-            )}
-          </div>
+              ) : (
+                <Link
+                  to="/chat/$id"
+                  params={{ id: partner.id }}
+                  className="inline-flex items-center gap-1.5 font-semibold text-primary-foreground/80 hover:text-white transition"
+                >
+                  <MessageCircle className="h-3.5 w-3.5" />
+                  <span>Or use in-app chat</span>
+                </Link>
+              )}
+
+              {onClose && (
+                <>
+                  <span className="opacity-40">·</span>
+                  <button
+                    type="button"
+                    onClick={onClose}
+                    className="font-semibold text-primary-foreground/80 hover:text-white transition"
+                  >
+                    Keep discovering
+                  </button>
+                </>
+              )}
+            </div>
+          ) : (
+            <p className="pt-0.5 text-center text-[11px] text-muted-foreground">
+              In-app messages are available below
+            </p>
+          )}
         </div>
       </div>
     </div>

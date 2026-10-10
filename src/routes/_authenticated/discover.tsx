@@ -269,11 +269,10 @@ function Discover() {
       const { data } = await supabase.rpc("is_match", { a: me.id, b: top.id });
       if (data) {
         Analytics.matchCreated();
-        if (openChat) nav({ to: "/chat/$id", params: { id: top.id } });
-        else setClash(top);
+        setClash(top);
       } else if (openChat) {
         setNote(
-          `Dandiya sent. Your chat with ${top.first_name} opens the moment they send one back.`,
+          `Dandiya sent. Your connection with ${top.first_name} opens the moment they send one back.`,
         );
       }
     }

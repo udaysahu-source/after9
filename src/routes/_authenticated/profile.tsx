@@ -120,7 +120,7 @@ export function calculateProfileCompletion(p: ProfileRow, socials: SocialLinkRow
 }
 
 function Profile() {
-  const { p, save, reload } = useMyProfile();
+  const { p, loading, save, reload } = useMyProfile();
   const nav = useNavigate();
   const verify = useServerFn(verifyProfile);
 
@@ -137,10 +137,69 @@ function Profile() {
     }
   }, [p?.id]);
 
+  if (loading) {
+    return (
+      <Shell maxWidth="wide">
+        <main className="flex-1 pb-24 md:pb-28">
+          <div className="flex items-center justify-between px-5 pt-6 md:pt-10">
+            <div className="space-y-2">
+              <div className="h-8 w-48 rounded-xl bg-muted animate-pulse" />
+              <div className="h-3.5 w-64 rounded-md bg-muted/60 animate-pulse" />
+            </div>
+          </div>
+
+          <div className="mt-5 md:mt-8 md:grid md:grid-cols-12 md:gap-8 md:px-5">
+            <div className="flex flex-col gap-5 md:col-span-5 px-5 md:px-0">
+              <div className="overflow-hidden rounded-2xl border border-border/80 bg-card p-5 space-y-4 shadow-xs">
+                <div className="flex items-center gap-4">
+                  <div className="h-20 w-16 rounded-xl bg-muted animate-pulse shrink-0" />
+                  <div className="flex-1 space-y-2">
+                    <div className="h-5 w-32 rounded bg-muted animate-pulse" />
+                    <div className="h-3.5 w-48 rounded bg-muted/60 animate-pulse" />
+                    <div className="h-3.5 w-28 rounded bg-muted/40 animate-pulse" />
+                  </div>
+                </div>
+                <div className="h-12 w-full rounded-xl bg-muted/40 animate-pulse" />
+                <div className="grid grid-cols-2 gap-2 pt-1">
+                  <div className="h-10 rounded-xl bg-muted/50 animate-pulse" />
+                  <div className="h-10 rounded-xl bg-muted/40 animate-pulse" />
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-border/80 bg-card p-3 space-y-2">
+                {[1, 2, 3, 4, 5].map((idx) => (
+                  <div key={idx} className="h-12 w-full rounded-xl bg-muted/30 animate-pulse" />
+                ))}
+              </div>
+            </div>
+          </div>
+        </main>
+        <BottomNav />
+      </Shell>
+    );
+  }
+
   if (!p) {
     return (
-      <Shell>
-        <div />
+      <Shell maxWidth="wide">
+        <main className="flex-1 flex flex-col items-center justify-center px-6 py-16 text-center">
+          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/10 text-primary mb-4 shadow-xs">
+            <User className="h-8 w-8" />
+          </div>
+          <h1 className="font-display text-2xl font-black text-primary">Set Up Your Profile</h1>
+          <p className="text-sm text-muted-foreground max-w-sm mt-2">
+            We couldn't load your profile record. Start quick onboarding to get your Dandiya pass and be discovered!
+          </p>
+          <div className="mt-6 flex flex-col sm:flex-row gap-3 w-full max-w-xs">
+            <Btn onClick={() => nav({ to: "/onboarding" })}>
+              Start Setup ✨
+            </Btn>
+            <Btn variant="outline" onClick={() => reload()}>
+              Retry
+            </Btn>
+          </div>
+        </main>
+        <BottomNav />
       </Shell>
     );
   }
@@ -179,9 +238,9 @@ function Profile() {
     },
     {
       id: "socials" as const,
-      label: "Social Links",
+      label: "Instagram & Socials",
       icon: Link2,
-      subtitle: socials.length > 0 ? `${socials.length} link${socials.length > 1 ? "s" : ""} added` : "Instagram, Snapchat, Spotify",
+      subtitle: socials.length > 0 ? `${socials.length} link${socials.length > 1 ? "s" : ""} added` : "Connect your Instagram for clashes",
     },
     {
       id: "discovery" as const,
@@ -422,6 +481,7 @@ function Profile() {
                     p={p}
                     photoUrl={p.photo_path ? urls[p.photo_path] : undefined}
                     onSave={saveAndCheck}
+                    onRequestVerification={() => setPhotoVerificationOpen(true)}
                   />
                 )}
 
@@ -533,10 +593,12 @@ function MyProfileCategory({
   p,
   photoUrl,
   onSave,
+  onRequestVerification,
 }: {
   p: ProfileRow;
   photoUrl?: string | undefined;
   onSave: (patch: Partial<ProfileRow>) => Promise<void>;
+  onRequestVerification?: () => void;
 }) {
   const [firstName, setFirstName] = useState(p.first_name ?? "");
   const [birthDate, setBirthDate] = useState(p.birth_date ?? "");
@@ -592,7 +654,7 @@ function MyProfileCategory({
 
   return (
     <div className="space-y-5">
-      {/* Photo Picker */}
+      {/* Photo Picker with Camera & Live Person Match */}
       <div>
         <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-2 block">
           Profile Photo
@@ -600,8 +662,12 @@ function MyProfileCategory({
         <PhotoPicker
           userId={p.id}
           url={photo.preview}
-          onUploaded={(path, preview) => setPhoto({ path, preview })}
+          onUploaded={(path, preview) => {
+            setPhoto({ path, preview });
+            onRequestVerification?.();
+          }}
           onRemove={() => setPhoto({ path: null })}
+          onRequestVerification={onRequestVerification}
         />
       </div>
 
@@ -703,6 +769,11 @@ function MyProfileCategory({
       <div className="space-y-2 pt-2 border-t border-border/60">
         <h3 className="font-display text-sm font-bold text-primary">Nights You're Attending</h3>
         <NightsPicker value={nights} onChange={setNights} />
+      </div>
+
+      {/* Dedicated Instagram Handle Field */}
+      <div className="pt-2 border-t border-border/60">
+        <ProfileInstagramField userId={p.id} />
       </div>
 
       <div className="pt-3">
@@ -1255,7 +1326,7 @@ function AccountCategory({ p }: { p: ProfileRow }) {
     checkAdmin()
       .then((res) => setIsAdmin(Boolean(res?.isAdmin)))
       .catch(() => setIsAdmin(false));
-  }, [checkAdmin]);
+  }, []);
 
   const handleSignOut = async () => {
     if (!confirm("Are you sure you want to sign out?")) return;

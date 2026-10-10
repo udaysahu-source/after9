@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { NIGHTS, goingNights, type Attendance } from "@/lib/after9";
 import { cn } from "@/lib/utils";
 import { validateBirthDate } from "@/lib/after9";
+import { Camera, Upload, RefreshCw, X, Check, ShieldCheck } from "lucide-react";
 
 export const fieldInput = "h-14 w-full border-b-2 border-border bg-transparent text-lg outline-none transition-colors duration-200 focus:border-action placeholder:text-muted-foreground/60";
 
@@ -285,58 +286,364 @@ export function NightsPicker({ value, onChange }: { value: Record<string, Attend
 }
 
 
-/** Validates type/size/dimensions, centre-crops to 3:4, compresses, uploads to private storage. */
-export function PhotoPicker({ userId, url, onUploaded, onRemove }: { userId: string; url?: string | undefined; onUploaded: (path: string, preview: string) => void; onRemove?: () => void }) {
+/** Validates type/size/dimensions, centre-crops to 3:4, compresses, uploads to private storage. Supports file upload and live camera capture. */
+export function PhotoPicker({
+  userId,
+  url,
+  onUploaded,
+  onRemove,
+  onRequestVerification,
+}: {
+  userId: string;
+  url?: string | null | undefined;
+  onUploaded: (path: string, preview: string) => void;
+  onRemove?: (() => void) | undefined;
+  onRequestVerification?: (() => void) | undefined;
+}) {
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
-  const pick = (f?: File) => {
+  const [cameraOpen, setCameraOpen] = useState(false);
+  const [facingMode, setFacingMode] = useState<"user" | "environment">("user");
+  const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
+  const [capturedPreview, setCapturedPreview] = useState<string | null>(null);
+  const [capturedBlob, setCapturedBlob] = useState<Blob | null>(null);
+
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const stopCamera = () => {
+    if (cameraStream) {
+      cameraStream.getTracks().forEach((track) => track.stop());
+      setCameraStream(null);
+    }
+  };
+
+  const startCamera = async (mode: "user" | "environment" = facingMode) => {
+    stopCamera();
     setErr("");
-    if (!f) return;
-    if (!/^image\/(jpeg|png|webp)$/.test(f.type)) return setErr("Use a JPG, PNG or WebP photo.");
-    if (f.size > 10 * 1024 * 1024) return setErr("That photo is over 10 MB.");
+    setCapturedPreview(null);
+    setCapturedBlob(null);
+    try {
+      if (!navigator.mediaDevices?.getUserMedia) {
+        throw new Error("Camera not supported on this browser or device.");
+      }
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: mode,
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+        },
+        audio: false,
+      });
+      setCameraStream(stream);
+      setCameraOpen(true);
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        videoRef.current.play().catch(() => {});
+      }
+    } catch (e: any) {
+      console.error("Camera error:", e);
+      let message = "Could not access camera. Please allow camera permissions in your browser.";
+      if (e.name === "NotAllowedError" || e.name === "PermissionDeniedError") {
+        message = "Camera permission was denied. Please allow camera access in browser settings.";
+      }
+      setErr(message);
+    }
+  };
+
+  const toggleCameraFacing = () => {
+    const next = facingMode === "user" ? "environment" : "user";
+    setFacingMode(next);
+    startCamera(next);
+  };
+
+  const closeCamera = () => {
+    stopCamera();
+    setCameraOpen(false);
+    setCapturedPreview(null);
+    setCapturedBlob(null);
+  };
+
+  // Re-attach video stream if ref mounts
+  useEffect(() => {
+    if (cameraOpen && cameraStream && videoRef.current && !capturedPreview) {
+      videoRef.current.srcObject = cameraStream;
+      videoRef.current.play().catch(() => {});
+    }
+  }, [cameraOpen, cameraStream, capturedPreview]);
+
+  // Clean up on unmount
+  useEffect(() => {
+    return () => {
+      stopCamera();
+    };
+  }, []);
+
+  const takeSnapshot = () => {
+    if (!videoRef.current) return;
+    const video = videoRef.current;
+    const w = video.videoWidth || 640;
+    const h = video.videoHeight || 480;
+
+    const canvas = document.createElement("canvas");
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    if (facingMode === "user") {
+      ctx.translate(w, 0);
+      ctx.scale(-1, 1);
+    }
+    ctx.drawImage(video, 0, 0, w, h);
+
+    canvas.toBlob((blob) => {
+      if (!blob) return;
+      setCapturedBlob(blob);
+      setCapturedPreview(URL.createObjectURL(blob));
+      stopCamera();
+    }, "image/jpeg", 0.9);
+  };
+
+  const processAndUploadBlob = (blob: Blob) => {
     const img = new Image();
-    const objectUrl = URL.createObjectURL(f);
+    const objectUrl = URL.createObjectURL(blob);
     img.onload = () => {
       URL.revokeObjectURL(objectUrl);
-      if (img.width < 400 || img.height < 400) return setErr("Photo needs to be at least 400px on each side.");
+      if (img.width < 400 || img.height < 400) {
+        setErr("Photo needs to be at least 400px on each side.");
+        return;
+      }
       const c = document.createElement("canvas");
       c.width = 900;
       c.height = 1200;
       const ctx = c.getContext("2d");
-      if (!ctx) return setErr("We couldn't process that photo.");
+      if (!ctx) {
+        setErr("We couldn't process that photo.");
+        return;
+      }
       ctx.imageSmoothingEnabled = true;
       ctx.imageSmoothingQuality = "high";
       const r = Math.max(900 / img.width, 1200 / img.height);
-      const w = img.width * r, h = img.height * r;
+      const w = img.width * r;
+      const h = img.height * r;
       ctx.drawImage(img, (900 - w) / 2, (1200 - h) / 2, w, h);
-      c.toBlob(async (blob) => {
-        if (!blob) return setErr("We couldn't process that photo.");
-        setBusy(true);
-        const path = `${userId}/${Date.now()}.jpg`;
-        const { error } = await supabase.storage.from("photos").upload(path, blob, { contentType: "image/jpeg" });
-        setBusy(false);
-        if (error) return setErr(error.message);
-        onUploaded(path, URL.createObjectURL(blob));
-      }, "image/jpeg", 0.82);
+      c.toBlob(
+        async (finalBlob) => {
+          if (!finalBlob) {
+            setErr("We couldn't process that photo.");
+            return;
+          }
+          setBusy(true);
+          const path = `${userId}/${Date.now()}.jpg`;
+          const { error } = await supabase.storage.from("photos").upload(path, finalBlob, { contentType: "image/jpeg" });
+          setBusy(false);
+          if (error) {
+            setErr(error.message);
+            return;
+          }
+          const preview = URL.createObjectURL(finalBlob);
+          onUploaded(path, preview);
+          closeCamera();
+          if (onRequestVerification) {
+            onRequestVerification();
+          }
+        },
+        "image/jpeg",
+        0.82
+      );
     };
     img.onerror = () => {
       URL.revokeObjectURL(objectUrl);
-      setErr("That file isn't a readable image.");
+      setErr("That image could not be loaded.");
     };
     img.src = objectUrl;
   };
+
+  const confirmCaptured = () => {
+    if (capturedBlob) {
+      processAndUploadBlob(capturedBlob);
+    }
+  };
+
+  const pickFile = (f?: File) => {
+    setErr("");
+    if (!f) return;
+    if (!/^image\/(jpeg|png|webp)$/.test(f.type)) return setErr("Use a JPG, PNG or WebP photo.");
+    if (f.size > 10 * 1024 * 1024) return setErr("That photo is over 10 MB.");
+    processAndUploadBlob(f);
+  };
+
   return (
-    <div className="flex flex-col items-center">
-      <label className="relative flex aspect-[3/4] w-3/4 cursor-pointer items-center justify-center overflow-hidden border-2 border-dashed border-border bg-card">
-        {url ? <img src={url} alt="Your profile" className="h-full w-full object-cover" /> : <span className="font-display text-5xl text-action">+</span>}
-        {busy && <span className="absolute inset-0 flex items-center justify-center bg-background/80 text-sm font-semibold">Uploading…</span>}
-        <input type="file" accept="image/jpeg,image/png,image/webp" className="sr-only" onChange={(e) => pick(e.target.files?.[0])} />
-      </label>
-      <div className="mt-3 flex gap-4 text-sm">
-        {url && <label className="cursor-pointer font-semibold text-primary">Replace<input type="file" accept="image/jpeg,image/png,image/webp" className="sr-only" onChange={(e) => pick(e.target.files?.[0])} /></label>}
-        {url && onRemove && <button type="button" className="text-muted-foreground underline" onClick={onRemove}>Remove</button>}
+    <div className="flex flex-col items-center w-full">
+      {/* 3:4 Profile Photo Box */}
+      <div className="relative flex aspect-[3/4] w-48 sm:w-56 cursor-pointer items-center justify-center overflow-hidden rounded-2xl border-2 border-dashed border-border/80 bg-card shadow-xs group transition hover:border-action">
+        {url ? (
+          <img src={url} alt="Your profile" className="h-full w-full object-cover transition duration-300 group-hover:scale-102" />
+        ) : (
+          <div className="flex flex-col items-center justify-center gap-2 p-4 text-center">
+            <span className="flex h-14 w-14 items-center justify-center rounded-full bg-primary/10 text-primary transition group-hover:bg-action group-hover:text-action-foreground">
+              <Camera className="h-7 w-7" />
+            </span>
+            <span className="text-xs font-bold text-foreground">Add Profile Photo</span>
+            <span className="text-[10px] text-muted-foreground">Solo portrait · 3:4 ratio</span>
+          </div>
+        )}
+
+        {busy && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-background/85 backdrop-blur-xs text-xs font-bold text-foreground">
+            <RefreshCw className="h-5 w-5 animate-spin text-action" />
+            <span>Processing photo…</span>
+          </div>
+        )}
       </div>
-      {err && <p className="mt-3 text-center text-sm text-destructive">{err}</p>}
+
+      {/* Hidden File Input */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/jpeg,image/png,image/webp"
+        className="sr-only"
+        onChange={(e) => pickFile(e.target.files?.[0])}
+      />
+
+      {/* Action Buttons: Camera vs File Upload */}
+      <div className="mt-4 flex flex-wrap items-center justify-center gap-2 text-xs">
+        <button
+          type="button"
+          onClick={() => startCamera("user")}
+          className="inline-flex items-center gap-1.5 rounded-xl bg-action px-3.5 py-2 font-bold text-action-foreground shadow-xs transition hover:brightness-105 active:scale-95"
+        >
+          <Camera className="h-3.5 w-3.5" />
+          <span>{url ? "Take New with Camera" : "Take with Camera"}</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => fileInputRef.current?.click()}
+          className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-card px-3.5 py-2 font-bold text-foreground transition hover:border-primary/60 active:scale-95"
+        >
+          <Upload className="h-3.5 w-3.5 text-muted-foreground" />
+          <span>{url ? "Upload from Files" : "Choose from Files"}</span>
+        </button>
+
+        {url && onRemove && (
+          <button
+            type="button"
+            className="text-xs text-muted-foreground hover:text-destructive underline px-2 py-1 transition"
+            onClick={onRemove}
+          >
+            Remove
+          </button>
+        )}
+      </div>
+
+      {/* Direct Live Person Verification Prompt when photo is present */}
+      {url && onRequestVerification && (
+        <div className="mt-3 flex w-full max-w-xs items-center justify-between rounded-xl border border-action/30 bg-action/10 px-3 py-2 text-xs">
+          <div className="flex items-center gap-1.5">
+            <ShieldCheck className="h-4 w-4 text-action shrink-0" />
+            <span className="font-semibold text-foreground">Live selfie check</span>
+          </div>
+          <button
+            type="button"
+            onClick={onRequestVerification}
+            className="font-bold text-action underline hover:opacity-80"
+          >
+            Verify Match
+          </button>
+        </div>
+      )}
+
+      {err && <p className="mt-3 text-center text-xs font-semibold text-destructive animate-fade-in">{err}</p>}
+
+      {/* FULLSCREEN CAMERA CAPTURE VIEWFINDER */}
+      {cameraOpen && (
+        <div className="fixed inset-0 z-50 flex flex-col items-center justify-between bg-black/95 p-4 text-white sm:p-6 animate-fade-in backdrop-blur-md">
+          {/* Viewfinder Top Bar */}
+          <div className="flex w-full max-w-md items-center justify-between pt-2">
+            <button
+              type="button"
+              onClick={closeCamera}
+              className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20 transition"
+              aria-label="Close camera"
+            >
+              <X className="h-5 w-5" />
+            </button>
+            <div className="text-center">
+              <p className="text-xs font-black uppercase tracking-wider text-action">LIVE PHOTO CAPTURE</p>
+              <p className="text-[11px] text-white/70">Position your face inside the frame</p>
+            </div>
+            <button
+              type="button"
+              onClick={toggleCameraFacing}
+              className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20 transition"
+              aria-label="Flip camera"
+            >
+              <RefreshCw className="h-4 w-4" />
+            </button>
+          </div>
+
+          {/* Viewfinder Frame (3:4 portrait guide) */}
+          <div className="relative my-auto flex aspect-[3/4] w-full max-w-xs sm:max-w-sm items-center justify-center overflow-hidden rounded-3xl border-2 border-white/30 bg-black shadow-2xl">
+            {capturedPreview ? (
+              <img src={capturedPreview} alt="Captured portrait" className="h-full w-full object-cover" />
+            ) : (
+              <video
+                ref={videoRef}
+                autoPlay
+                playsInline
+                muted
+                className={cn(
+                  "h-full w-full object-cover",
+                  facingMode === "user" && "-scale-x-100"
+                )}
+              />
+            )}
+
+            {/* Oval Face Guide Overlay */}
+            {!capturedPreview && (
+              <div className="pointer-events-none absolute inset-x-8 inset-y-12 rounded-[50%] border-2 border-dashed border-white/50" />
+            )}
+          </div>
+
+          {/* Viewfinder Bottom Controls */}
+          <div className="flex w-full max-w-md items-center justify-around pb-6">
+            {capturedPreview ? (
+              <div className="flex w-full items-center justify-center gap-4">
+                <button
+                  type="button"
+                  onClick={() => startCamera(facingMode)}
+                  className="flex items-center gap-1.5 rounded-full border border-white/30 bg-white/10 px-5 py-3 text-sm font-bold text-white transition hover:bg-white/20"
+                >
+                  <RefreshCw className="h-4 w-4" />
+                  <span>Retake</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={confirmCaptured}
+                  disabled={busy}
+                  className="flex items-center gap-1.5 rounded-full bg-action px-6 py-3 text-sm font-extrabold text-action-foreground shadow-lg transition hover:brightness-105 active:scale-95 disabled:opacity-50"
+                >
+                  <Check className="h-4 w-4" />
+                  <span>{busy ? "Uploading…" : "Use Photo ✨"}</span>
+                </button>
+              </div>
+            ) : (
+              <div className="flex items-center justify-center">
+                <button
+                  type="button"
+                  onClick={takeSnapshot}
+                  className="flex h-20 w-20 items-center justify-center rounded-full border-4 border-white bg-action shadow-xl transition hover:scale-105 active:scale-95"
+                  aria-label="Take photo"
+                >
+                  <div className="h-14 w-14 rounded-full bg-action-foreground/20 border-2 border-white/60" />
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

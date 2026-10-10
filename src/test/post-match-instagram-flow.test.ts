@@ -6,6 +6,7 @@ import {
   removeUserInstagramHandle,
   copyInstagramHandle,
   getInstagramProfileUrl,
+  openInstagramProfile,
 } from "@/lib/instagram-match";
 import { validateAndNormalizeSocial } from "@/lib/social-links";
 import { supabase } from "@/integrations/supabase/client";
@@ -278,6 +279,134 @@ describe("Post-Match Instagram Flow & Consent Exchange", () => {
     it("returns false if handle is empty", async () => {
       const ok = await copyInstagramHandle("");
       expect(ok).toBe(false);
+    });
+  });
+
+  // ============================================================================
+  // 7. EXTERNAL PROFILE & BROWSER/APP NAVIGATION
+  // ============================================================================
+  describe("7. External Instagram Profile & Mobile Browser/App Navigation", () => {
+    it("opens Instagram profile with valid URL and returns true", () => {
+      const openMock = vi.fn().mockReturnValue({ closed: false });
+      window.open = openMock;
+
+      const ok = openInstagramProfile("aarav_garba");
+      expect(ok).toBe(true);
+      expect(openMock).toHaveBeenCalledWith(
+        "https://instagram.com/aarav_garba",
+        "_blank",
+        "noopener,noreferrer"
+      );
+    });
+
+    it("falls back to window.location.href when window.open is blocked or returns null", () => {
+      window.open = vi.fn().mockReturnValue(null);
+      let assignedHref = "";
+      Object.defineProperty(window, "location", {
+        value: {
+          set href(val: string) {
+            assignedHref = val;
+          },
+          get href() {
+            return assignedHref;
+          },
+        },
+        writable: true,
+      });
+
+      const ok = openInstagramProfile("diya_patel");
+      expect(ok).toBe(true);
+      expect(assignedHref).toBe("https://instagram.com/diya_patel");
+    });
+
+    it("refuses to open when handle is invalid and returns false", () => {
+      const openMock = vi.fn();
+      window.open = openMock;
+
+      const ok = openInstagramProfile("invalid!handle$");
+      expect(ok).toBe(false);
+      expect(openMock).not.toHaveBeenCalled();
+    });
+  });
+
+  // ============================================================================
+  // 8. DIRECT URL ACCESS & NON-MATCH PROTECTION
+  // ============================================================================
+  describe("8. Direct URL Access & Unauthorized Inspection Protection", () => {
+    it("protects against direct URL access when users are not matched", async () => {
+      (supabase.rpc as any).mockResolvedValue({
+        data: {
+          is_match: false,
+          my_consent: false,
+          partner_consent: false,
+          both_consented: false,
+          partner_handle: null,
+          partner_url: null,
+          my_handle: null,
+          my_url: null,
+        },
+        error: null,
+      });
+
+      const res = await getMatchInstagramStatus("arbitrary-stranger-id");
+      expect(res.isMatch).toBe(false);
+      expect(res.bothConsented).toBe(false);
+      expect(res.partnerHandle).toBeNull();
+      expect(res.partnerUrl).toBeNull();
+    });
+
+    it("handles null RPC response gracefully on network error or unauthorized access", async () => {
+      (supabase.rpc as any).mockResolvedValue({
+        data: null,
+        error: { message: "Permission denied or user blocked" },
+      });
+
+      const res = await getMatchInstagramStatus("unauthorized-user");
+      expect(res.isMatch).toBe(false);
+      expect(res.bothConsented).toBe(false);
+      expect(res.partnerHandle).toBeNull();
+    });
+  });
+
+  // ============================================================================
+  // 9. SAVE USER INSTAGRAM HANDLE WITH NORMALIZATION
+  // ============================================================================
+  describe("9. Save User Instagram Handle with Normalization", () => {
+    it("normalizes and saves valid handle with matched visibility", async () => {
+      const singleMock = vi.fn().mockResolvedValue({
+        data: {
+          id: "link-1",
+          user_id: "user-123",
+          platform: "instagram",
+          handle: "garba_lover",
+          profile_url: "https://instagram.com/garba_lover",
+          is_enabled: true,
+          visibility: "matched",
+        },
+        error: null,
+      });
+      const selectMock = vi.fn().mockReturnValue({ single: singleMock });
+      const upsertMock = vi.fn().mockReturnValue({ select: selectMock });
+      (supabase.from as any).mockReturnValue({ upsert: upsertMock });
+
+      const res = await saveUserInstagramHandle("user-123", "@garba_lover");
+      expect(res.ok).toBe(true);
+      expect(res.handle).toBe("garba_lover");
+      expect(upsertMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          platform: "instagram",
+          handle: "garba_lover",
+          profile_url: "https://instagram.com/garba_lover",
+          visibility: "matched",
+        }),
+        expect.anything()
+      );
+    });
+
+    it("rejects invalid handles before calling database", async () => {
+      const res = await saveUserInstagramHandle("user-123", "invalid!user#");
+      expect(res.ok).toBe(false);
+      expect(res.error).toBeDefined();
     });
   });
 });

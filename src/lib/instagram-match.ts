@@ -116,8 +116,16 @@ export function openInstagramProfile(rawHandle: string): boolean {
   }
   // Standard https://instagram.com link opens native Instagram via Universal Links
   // on iOS/Android if installed, or smoothly opens in web browser if not installed.
-  window.open(url, "_blank", "noopener,noreferrer");
-  return true;
+  try {
+    const win = window.open(url, "_blank", "noopener,noreferrer");
+    if (!win || win.closed || typeof win.closed === "undefined") {
+      window.location.href = url;
+    }
+    return true;
+  } catch {
+    window.location.href = url;
+    return true;
+  }
 }
 
 /** Save or update user's own Instagram handle */

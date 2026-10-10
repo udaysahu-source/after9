@@ -185,15 +185,51 @@ export function useMyProfile() {
   const [p, setP] = useState<ProfileRow | null>(null);
   const [loading, setLoading] = useState(true);
   const load = async () => {
-    const { data: u } = await supabase.auth.getUser();
-    if (!u.user) { setLoading(false); return; }
-    const { data } = await supabase.from("profiles").select("*").eq("id", u.user.id).maybeSingle();
-    setP(data); setLoading(false);
+    try {
+      setLoading(true);
+      const { data: u } = await supabase.auth.getUser();
+      if (!u?.user) {
+        setP(null);
+        setLoading(false);
+        return;
+      }
+      let { data, error } = await supabase.from("profiles").select("*").eq("id", u.user.id).maybeSingle();
+      // Auto-heal missing profile row for authenticated user (e.g. if DB trigger did not fire)
+      if (!data && !error && u.user) {
+        const meta = u.user.user_metadata as Record<string, any> | undefined;
+        const initialName =
+          meta?.["full_name"]?.split(" ")[0] ||
+          meta?.["name"] ||
+          u.user.email?.split("@")[0] ||
+          "Garba Dancer";
+
+        const { data: created, error: insertError } = await supabase
+          .from("profiles")
+          .insert({
+            id: u.user.id,
+            first_name: initialName,
+            gender: "unspecified",
+            interested_in: "everyone",
+            nights: { "1": false, "2": false, "3": false, "4": false, "5": false, "6": false, "7": false, "8": false, "9": false },
+          })
+          .select("*")
+          .maybeSingle();
+
+        if (!insertError && created) {
+          data = created;
+        }
+      }
+      setP(data);
+    } catch (err) {
+      console.error("[useMyProfile] Load error:", err);
+    } finally {
+      setLoading(false);
+    }
   };
   useEffect(() => { load(); }, []);
   const save = async (patch: Partial<ProfileRow>) => {
     if (!p) return { error: new Error("No profile") };
-    const { data, error } = await supabase.from("profiles").update(patch).eq("id", p.id).select("*").single();
+    const { data, error } = await supabase.from("profiles").update(patch).eq("id", p.id).select("*").maybeSingle();
     if (data) setP(data);
     return { error };
   };

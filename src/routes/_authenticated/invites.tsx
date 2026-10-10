@@ -116,33 +116,73 @@ function InviteList() {
             </div>
 
             <div className="mx-5 md:mx-0 md:col-span-7">
-              <p className="mb-2 text-xs font-semibold tracking-wider uppercase text-action">Saved contacts</p>
-              {contacts.length === 0 && <p className="py-4 text-sm text-muted-foreground">No friends saved yet. Add someone above and they'll get one of your codes.</p>}
-              <div className="divide-y divide-border rounded-xs border border-border/60 bg-card shadow-2xs">
-                {contacts.map((c) => (
-                  <div key={c.id} className="p-4 transition-colors hover:bg-muted/20">
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="truncate font-semibold">{c.name}</p>
-                        <p className="truncate text-sm text-muted-foreground">{c.email}</p>
-                      </div>
-                      <span className={cn("shrink-0 text-xs font-semibold uppercase tracking-wider", STAGE[c.stage][1])}>{STAGE[c.stage][0]}</span>
-                    </div>
-                    <div className="mt-3 flex items-center justify-between">
-                      <span className="font-display tracking-widest text-sm font-semibold text-primary">{c.code ?? "No code free"}</span>
-                      <span className="flex gap-3 text-sm">
-                        {c.stage === "saved" && <button className="text-muted-foreground hover:text-foreground" onClick={async () => { await remove({ data: { id: c.id } }); load(); }}>Remove</button>}
-                        {c.code && (c.stage === "saved" || c.stage === "sent") && (
-                          <>
-                            <button className="font-semibold text-action hover:underline" onClick={() => drawInviteCard(c.code!, `${location.origin}/?invite=${c.code}&src=card`)}>Card</button>
-                            <button className="font-semibold text-primary hover:underline" onClick={() => share(c)}>{copied === c.id ? "Copied" : c.sent_at ? "Resend" : "Send invite"}</button>
-                          </>
-                        )}
-                      </span>
-                    </div>
-                  </div>
-                ))}
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-xs font-semibold tracking-wider uppercase text-action">Saved contacts</p>
+                {contacts.length > 0 && (
+                  <span className="text-xs text-muted-foreground">{contacts.length} {contacts.length === 1 ? "friend" : "friends"}</span>
+                )}
               </div>
+              {contacts.length === 0 ? (
+                <div className="rounded-2xl border border-dashed border-border/80 bg-card/60 p-8 text-center space-y-2">
+                  <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-action/10 text-action">
+                    <span className="text-2xl animate-bounce-soft">🎟️</span>
+                  </div>
+                  <p className="font-display text-base font-bold text-primary">No friends on your list yet</p>
+                  <p className="text-xs text-muted-foreground max-w-sm mx-auto leading-relaxed">
+                    Add friends above using their name and email. They'll receive a unique VIP code that lets them join After9 and instantly skip verification.
+                  </p>
+                </div>
+              ) : (
+                <div className="divide-y divide-border rounded-xl border border-border/60 bg-card shadow-2xs overflow-hidden">
+                  {contacts.map((c) => (
+                    <div key={c.id} className="p-4 transition-colors hover:bg-muted/20">
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="truncate font-semibold text-primary">{c.name}</p>
+                          <p className="truncate text-xs text-muted-foreground">{c.email}</p>
+                        </div>
+                        <span className={cn("shrink-0 text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-muted/60", STAGE[c.stage][1])}>
+                          {STAGE[c.stage][0]}
+                        </span>
+                      </div>
+                      <div className="mt-3 flex items-center justify-between pt-2 border-t border-border/40">
+                        <span className="font-mono tracking-widest text-xs font-bold text-primary bg-muted/40 px-2 py-1 rounded">
+                          {c.code ?? "No code free"}
+                        </span>
+                        <div className="flex items-center gap-2">
+                          {c.stage === "saved" && (
+                            <button
+                              type="button"
+                              className="min-h-[36px] px-2.5 py-1 text-xs text-muted-foreground hover:text-destructive touch-tactile active:scale-95"
+                              onClick={async () => { await remove({ data: { id: c.id } }); load(); }}
+                            >
+                              Remove
+                            </button>
+                          )}
+                          {c.code && (c.stage === "saved" || c.stage === "sent") && (
+                            <>
+                              <button
+                                type="button"
+                                className="min-h-[36px] px-2.5 py-1 text-xs font-bold text-action hover:bg-action/10 rounded-md touch-tactile active:scale-95"
+                                onClick={() => drawInviteCard(c.code!, `${location.origin}/?invite=${c.code}&src=card`)}
+                              >
+                                View Card
+                              </button>
+                              <button
+                                type="button"
+                                className="min-h-[36px] px-3 py-1 text-xs font-bold bg-primary text-primary-foreground rounded-lg shadow-2xs hover:opacity-90 touch-tactile active:scale-95"
+                                onClick={() => share(c)}
+                              >
+                                {copied === c.id ? "✓ Copied" : c.sent_at ? "Resend" : "Send invite"}
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
       </main>

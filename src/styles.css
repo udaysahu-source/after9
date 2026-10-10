@@ -47,6 +47,8 @@
   --color-action-foreground: var(--action-foreground);
   --color-rose: var(--rose);
   --color-teal: var(--teal);
+  --color-gold: var(--gold);
+  --color-emerald: var(--emerald);
   --font-display: "Syne", sans-serif;
   --font-sans: "Plus Jakarta Sans", sans-serif;
   --color-input: var(--input);
@@ -81,6 +83,8 @@
   --action-foreground: oklch(0.985 0.022 85);
   --rose: oklch(0.65 0.12 10);
   --teal: oklch(0.52 0.07 192);
+  --gold: oklch(0.78 0.17 75);              /* festive amber-gold */
+  --emerald: oklch(0.62 0.17 155);          /* festive green */
   --secondary: oklch(0.985 0.022 85);
   --secondary-foreground: oklch(0.31 0.1 357);
   --muted: oklch(0.93 0.015 75);
@@ -259,6 +263,28 @@
 }
 @utility animate-pulse-gentle {
   animation: gentle-pulse 3s var(--ease-in-out-smooth) infinite;
+}
+
+/* Subtle floating bounce for festive icons and empty states */
+@keyframes bounce-soft {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-8px);
+  }
+}
+@utility animate-bounce-soft {
+  animation: bounce-soft 2.4s var(--ease-in-out-smooth) infinite;
+}
+
+/* Card hover lift effect for desktop and tablet */
+@utility card-hover-lift {
+  transition: transform 0.22s var(--ease-out-quint), box-shadow 0.22s var(--ease-out-quint), border-color 0.22s ease;
+  will-change: transform, box-shadow;
+  &:hover {
+    transform: translateY(-3px);
+  }
 }
 
 /* Input / Validation Error Shake */

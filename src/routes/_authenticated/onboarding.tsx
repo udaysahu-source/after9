@@ -113,19 +113,19 @@ function Onboarding() {
       <div className="mx-auto flex w-full max-w-lg items-center gap-4 px-4 sm:px-5 pt-4 sm:pt-5">
         <button
           onClick={back}
-          className="text-2xl text-primary transition-opacity hover:opacity-80 p-1"
+          className="text-2xl text-primary transition-opacity hover:opacity-80 p-2 touch-tactile active:scale-95"
           aria-label="Back"
         >
           ←
         </button>
-        <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-border">
+        <div className="h-2 flex-1 overflow-hidden rounded-full bg-border/80">
           <div
-            className="h-full bg-action transition-all duration-300"
+            className="h-full bg-gradient-to-r from-action via-amber-500 to-rose-500 transition-all duration-300 rounded-full"
             style={{ width: `${((step + 1) / TOTAL) * 100}%` }}
           />
         </div>
-        <span className="text-xs tabular-nums text-muted-foreground font-semibold">
-          {step + 1}/{TOTAL}
+        <span className="text-xs tabular-nums text-muted-foreground font-bold shrink-0">
+          Step {step + 1} of {TOTAL}
         </span>
       </div>
 
@@ -139,10 +139,15 @@ function Onboarding() {
   );
 }
 
-function H({ k, t, s }: { k: string; t: string; s?: string }) {
+function H({ k, t, s, badge }: { k: string; t: string; s?: string; badge?: string }) {
   return (
     <div className="mb-6 sm:mb-8">
-      <p className="mb-2 text-xs font-semibold tracking-widest text-action uppercase">{k}</p>
+      {badge && (
+        <div className="inline-flex items-center gap-1.5 rounded-full bg-action/15 border border-action/30 px-3 py-1 text-xs font-bold text-action mb-3">
+          <span>🪔</span> {badge}
+        </div>
+      )}
+      <p className="mb-1.5 text-xs font-bold tracking-widest text-action uppercase">{k}</p>
       <h1 className="font-display text-2xl sm:text-3xl font-extrabold leading-[1.1] text-primary">
         {t}
       </h1>
@@ -189,9 +194,10 @@ function Step({
     return (
       <>
         <H
-          k="ABOUT YOU"
-          t="Let's start with you."
-          s="Enter your first name and birth date to confirm you're 18+."
+          badge="Welcome to After9 · Raipur 2026"
+          k="STEP 1 · ABOUT YOU"
+          t="Let's build your Garba profile"
+          s="Find your festival crew and mutual Dandiya clashes across Raipur. Takes under 2 minutes."
         />
         <div className="flex flex-col gap-5 sm:gap-6">
           <div>
@@ -423,7 +429,7 @@ function Step({
       </div>
 
       <Btn
-        className="mt-auto pt-6"
+        className="mt-auto pt-6 min-h-[48px] touch-tactile shadow-md hover:shadow-lg transition-all"
         disabled={!photo.path}
         onClick={() =>
           next({
@@ -432,7 +438,7 @@ function Step({
           })
         }
       >
-        Complete & Enter After9
+        Complete & Enter Festival Floor ✨
       </Btn>
     </>
   );

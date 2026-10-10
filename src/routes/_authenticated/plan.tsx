@@ -480,18 +480,18 @@ function PlanPage() {
               <p className="text-xs text-muted-foreground max-w-sm leading-relaxed">
                 We haven't listed a Garba event matching your search or date yet. Know an organizer hosting a night here?
               </p>
-              <div className="pt-2 flex flex-wrap items-center justify-center gap-2">
+              <div className="pt-2 flex flex-wrap items-center justify-center gap-2.5">
                 <button
                   type="button"
                   onClick={clearAllFilters}
-                  className="rounded-xl border border-border/80 bg-card px-4 py-2 text-xs font-bold text-foreground shadow-2xs hover:bg-muted"
+                  className="min-h-[44px] touch-tactile active:scale-95 rounded-xl border border-border/80 bg-card px-4 py-2.5 text-xs font-bold text-foreground shadow-2xs hover:bg-muted transition-all"
                 >
                   Clear Filters
                 </button>
                 <button
                   type="button"
                   onClick={() => setSuggestModalOpen(true)}
-                  className="rounded-xl bg-action px-4 py-2 text-xs font-bold text-action-foreground shadow-xs hover:opacity-90"
+                  className="min-h-[44px] touch-tactile active:scale-95 rounded-xl bg-action px-5 py-2.5 text-xs font-bold text-action-foreground shadow-xs hover:opacity-90 transition-all"
                 >
                   Suggest an Event
                 </button>
@@ -576,7 +576,7 @@ function PlanPage() {
                         ))}
                       </div>
 
-                      <div className="flex items-center gap-1.5">
+                      <div className="flex items-center gap-2">
                         <button
                           type="button"
                           onClick={async () => {
@@ -584,9 +584,9 @@ function PlanPage() {
                             toast.success("Response recorded!");
                             loadData();
                           }}
-                          className="rounded-lg bg-primary px-3 py-1 text-xs font-bold text-primary-foreground shadow-2xs hover:opacity-90"
+                          className="min-h-[40px] touch-tactile active:scale-95 rounded-xl bg-action px-3.5 py-2 text-xs font-bold text-action-foreground shadow-2xs hover:opacity-90 transition-all"
                         >
-                          I'm In
+                          I'm In ✨
                         </button>
                         <button
                           type="button"
@@ -595,7 +595,7 @@ function PlanPage() {
                             toast.success("Plan declined.");
                             loadData();
                           }}
-                          className="rounded-lg border border-border/80 px-2.5 py-1 text-xs font-semibold text-muted-foreground hover:bg-muted"
+                          className="min-h-[40px] touch-tactile active:scale-95 rounded-xl border border-border/80 bg-card px-3 py-2 text-xs font-semibold text-muted-foreground hover:bg-muted transition-all"
                         >
                           Can't Go
                         </button>
@@ -608,22 +608,36 @@ function PlanPage() {
           )}
 
           {/* Saved Events Section */}
-          <div className="space-y-3">
+          <div className="space-y-4">
             <h2 className="font-display text-xl font-extrabold text-primary flex items-center gap-2">
               <Bookmark className="h-5 w-5 text-action" /> Saved Garba Nights ({savedEvents.length})
             </h2>
 
             {savedEvents.length === 0 ? (
-              <div className="rounded-3xl border border-dashed border-border/80 bg-card/60 p-8 text-center space-y-2">
-                <p className="font-display text-base font-bold text-primary">No saved events yet</p>
-                <p className="text-xs text-muted-foreground">Tap the bookmark icon on any event card to save it to your personal schedule.</p>
-                <button
-                  type="button"
-                  onClick={() => setActiveTab("discover")}
-                  className="rounded-xl bg-primary px-4 py-2 text-xs font-bold text-primary-foreground shadow-xs mt-2"
-                >
-                  Explore Events
-                </button>
+              <div className="rounded-3xl border border-dashed border-border/80 bg-gradient-to-b from-card via-card/80 to-action/5 p-8 text-center space-y-4 shadow-2xs">
+                <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-action/10 border border-action/20 text-action">
+                  <Bookmark className="h-8 w-8 animate-bounce-soft" />
+                </div>
+                <div className="space-y-1 max-w-sm mx-auto">
+                  <p className="font-display text-lg font-bold text-primary">Your Raipur Navratri Itinerary</p>
+                  <p className="text-xs text-muted-foreground leading-relaxed">
+                    Bookmark your favorite Garba nights to track venue timings, ticket sales, and easily coordinate group plans with your Dandiya clashes.
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-center justify-center gap-2 text-[11px] text-muted-foreground/90 font-medium py-1">
+                  <span className="rounded-full bg-secondary/80 px-2.5 py-1">📅 Daily Schedule</span>
+                  <span className="rounded-full bg-secondary/80 px-2.5 py-1">🎟️ Pass Price Compare</span>
+                  <span className="rounded-full bg-secondary/80 px-2.5 py-1">🤝 1-Click Group Plans</span>
+                </div>
+                <div>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab("discover")}
+                    className="min-h-[44px] touch-tactile active:scale-95 rounded-xl bg-action px-6 py-2.5 text-xs font-bold text-action-foreground shadow-xs hover:opacity-95 transition-all"
+                  >
+                    Explore Raipur Events →
+                  </button>
+                </div>
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">

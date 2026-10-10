@@ -1,6 +1,6 @@
 import { Link } from "@tanstack/react-router";
 import type { ReactNode } from "react";
-import { Compass, MessageCircle, User } from "lucide-react";
+import { Compass, CalendarDays, MessageCircle, User } from "lucide-react";
 import { cn } from "@/lib/utils";
 import appIcon from "@/assets/app_icon.png";
 
@@ -120,6 +120,20 @@ export function BottomNav() {
                 )}
               />
               <span className={cn(isActive && "text-primary font-bold")}>Discover</span>
+              {isActive && <span className="h-1 w-1 rounded-full bg-action animate-scale-in" />}
+            </>
+          )}
+        </Link>
+        <Link to="/plan" className={item} activeProps={active}>
+          {({ isActive }) => (
+            <>
+              <CalendarDays
+                className={cn(
+                  "h-5 w-5 transition-transform duration-200 group-hover:scale-110",
+                  isActive ? "text-action scale-105 stroke-[2.3]" : "text-muted-foreground/85 stroke-2"
+                )}
+              />
+              <span className={cn(isActive && "text-primary font-bold")}>Plan</span>
               {isActive && <span className="h-1 w-1 rounded-full bg-action animate-scale-in" />}
             </>
           )}

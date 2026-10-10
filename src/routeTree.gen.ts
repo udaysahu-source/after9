@@ -17,9 +17,11 @@ import { Route as AuthenticatedDiscoverRouteImport } from './routes/_authenticat
 import { Route as AuthenticatedInvitesRouteImport } from './routes/_authenticated/invites'
 import { Route as AuthenticatedMatchesRouteImport } from './routes/_authenticated/matches'
 import { Route as AuthenticatedOnboardingRouteImport } from './routes/_authenticated/onboarding'
+import { Route as AuthenticatedPlanRouteImport } from './routes/_authenticated/plan'
 import { Route as AuthenticatedProfileRouteImport } from './routes/_authenticated/profile'
 import { Route as PTokenRouteImport } from './routes/p.$token'
 import { Route as AuthenticatedChatIdRouteImport } from './routes/_authenticated/chat.$id'
+import { Route as AuthenticatedPlanIdRouteImport } from './routes/_authenticated/plan.$id'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -60,6 +62,11 @@ const AuthenticatedOnboardingRoute = AuthenticatedOnboardingRouteImport.update({
   path: '/onboarding',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedPlanRoute = AuthenticatedPlanRouteImport.update({
+  id: '/plan',
+  path: '/plan',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedProfileRoute = AuthenticatedProfileRouteImport.update({
   id: '/profile',
   path: '/profile',
@@ -75,6 +82,11 @@ const AuthenticatedChatIdRoute = AuthenticatedChatIdRouteImport.update({
   path: '/chat/$id',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedPlanIdRoute = AuthenticatedPlanIdRouteImport.update({
+  id: '/$id',
+  path: '/$id',
+  getParentRoute: () => AuthenticatedPlanRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -84,9 +96,11 @@ export interface FileRoutesByFullPath {
   '/invites': typeof AuthenticatedInvitesRoute
   '/matches': typeof AuthenticatedMatchesRoute
   '/onboarding': typeof AuthenticatedOnboardingRoute
+  '/plan': typeof AuthenticatedPlanRouteWithChildren
   '/profile': typeof AuthenticatedProfileRoute
   '/p/$token': typeof PTokenRoute
   '/chat/$id': typeof AuthenticatedChatIdRoute
+  '/plan/$id': typeof AuthenticatedPlanIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -96,9 +110,11 @@ export interface FileRoutesByTo {
   '/invites': typeof AuthenticatedInvitesRoute
   '/matches': typeof AuthenticatedMatchesRoute
   '/onboarding': typeof AuthenticatedOnboardingRoute
+  '/plan': typeof AuthenticatedPlanRouteWithChildren
   '/profile': typeof AuthenticatedProfileRoute
   '/p/$token': typeof PTokenRoute
   '/chat/$id': typeof AuthenticatedChatIdRoute
+  '/plan/$id': typeof AuthenticatedPlanIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -110,9 +126,11 @@ export interface FileRoutesById {
   '/_authenticated/invites': typeof AuthenticatedInvitesRoute
   '/_authenticated/matches': typeof AuthenticatedMatchesRoute
   '/_authenticated/onboarding': typeof AuthenticatedOnboardingRoute
+  '/_authenticated/plan': typeof AuthenticatedPlanRouteWithChildren
   '/_authenticated/profile': typeof AuthenticatedProfileRoute
   '/p/$token': typeof PTokenRoute
   '/_authenticated/chat/$id': typeof AuthenticatedChatIdRoute
+  '/_authenticated/plan/$id': typeof AuthenticatedPlanIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -124,9 +142,11 @@ export interface FileRouteTypes {
     | '/invites'
     | '/matches'
     | '/onboarding'
+    | '/plan'
     | '/profile'
     | '/p/$token'
     | '/chat/$id'
+    | '/plan/$id'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -136,9 +156,11 @@ export interface FileRouteTypes {
     | '/invites'
     | '/matches'
     | '/onboarding'
+    | '/plan'
     | '/profile'
     | '/p/$token'
     | '/chat/$id'
+    | '/plan/$id'
   id:
     | '__root__'
     | '/'
@@ -149,9 +171,11 @@ export interface FileRouteTypes {
     | '/_authenticated/invites'
     | '/_authenticated/matches'
     | '/_authenticated/onboarding'
+    | '/_authenticated/plan'
     | '/_authenticated/profile'
     | '/p/$token'
     | '/_authenticated/chat/$id'
+    | '/_authenticated/plan/$id'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -220,6 +244,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedOnboardingRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/plan': {
+      id: '/_authenticated/plan'
+      path: '/plan'
+      fullPath: '/plan'
+      preLoaderRoute: typeof AuthenticatedPlanRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/profile': {
       id: '/_authenticated/profile'
       path: '/profile'
@@ -241,14 +272,33 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedChatIdRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/plan/$id': {
+      id: '/_authenticated/plan/$id'
+      path: '/$id'
+      fullPath: '/plan/$id'
+      preLoaderRoute: typeof AuthenticatedPlanIdRouteImport
+      parentRoute: typeof AuthenticatedPlanRoute
+    }
   }
 }
+
+interface AuthenticatedPlanRouteChildren {
+  AuthenticatedPlanIdRoute: typeof AuthenticatedPlanIdRoute
+}
+
+const AuthenticatedPlanRouteChildren: AuthenticatedPlanRouteChildren = {
+  AuthenticatedPlanIdRoute: AuthenticatedPlanIdRoute,
+}
+
+const AuthenticatedPlanRouteWithChildren =
+  AuthenticatedPlanRoute._addFileChildren(AuthenticatedPlanRouteChildren)
 
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedDiscoverRoute: typeof AuthenticatedDiscoverRoute
   AuthenticatedInvitesRoute: typeof AuthenticatedInvitesRoute
   AuthenticatedMatchesRoute: typeof AuthenticatedMatchesRoute
   AuthenticatedOnboardingRoute: typeof AuthenticatedOnboardingRoute
+  AuthenticatedPlanRoute: typeof AuthenticatedPlanRouteWithChildren
   AuthenticatedProfileRoute: typeof AuthenticatedProfileRoute
   AuthenticatedChatIdRoute: typeof AuthenticatedChatIdRoute
 }
@@ -258,6 +308,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedInvitesRoute: AuthenticatedInvitesRoute,
   AuthenticatedMatchesRoute: AuthenticatedMatchesRoute,
   AuthenticatedOnboardingRoute: AuthenticatedOnboardingRoute,
+  AuthenticatedPlanRoute: AuthenticatedPlanRouteWithChildren,
   AuthenticatedProfileRoute: AuthenticatedProfileRoute,
   AuthenticatedChatIdRoute: AuthenticatedChatIdRoute,
 }

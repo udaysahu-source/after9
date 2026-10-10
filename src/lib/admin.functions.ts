@@ -549,61 +549,110 @@ export const saveAdminEvent = createServerFn({ method: "POST" })
   .inputValidator((d: {
     id?: string | undefined;
     title: string;
+    slug?: string | undefined;
     venue: string;
+    area?: string | undefined;
+    address?: string | undefined;
     city?: string | undefined;
+    state?: string | undefined;
+    start_date?: string | undefined;
+    end_date?: string | undefined;
+    start_time?: string | undefined;
+    end_time?: string | undefined;
+    dates?: string[] | undefined;
     organizer?: string | undefined;
+    poster_url?: string | undefined;
     booking_url?: string | undefined;
     ticket_price_range?: string | undefined;
+    min_price_inr?: number | undefined;
+    max_price_inr?: number | undefined;
     price_source?: string | undefined;
-    verification_status?: "verified" | "unverified" | "expired" | undefined;
+    source_notes?: string | undefined;
+    source_url?: string | undefined;
+    contact_verified?: string | undefined;
+    themes_count?: number | undefined;
+    highlights?: string[] | undefined;
+    verification_status?: string | undefined;
+    publication_status?: string | undefined;
     is_active?: boolean | undefined;
   }) => ({
     id: d.id,
     title: String(d.title).trim(),
+    slug: d.slug ? String(d.slug).trim() : undefined,
     venue: String(d.venue).trim(),
+    area: d.area ? String(d.area).trim() : undefined,
+    address: d.address ? String(d.address).trim() : undefined,
     city: String(d.city ?? "Raipur").trim(),
+    state: String(d.state ?? "Chhattisgarh").trim(),
+    start_date: d.start_date ? String(d.start_date).trim() : undefined,
+    end_date: d.end_date ? String(d.end_date).trim() : undefined,
+    start_time: d.start_time ? String(d.start_time).trim() : undefined,
+    end_time: d.end_time ? String(d.end_time).trim() : undefined,
+    dates: Array.isArray(d.dates) ? d.dates : undefined,
     organizer: d.organizer ? String(d.organizer).trim() : undefined,
+    poster_url: d.poster_url ? String(d.poster_url).trim() : undefined,
     booking_url: d.booking_url ? String(d.booking_url).trim() : undefined,
     ticket_price_range: d.ticket_price_range ? String(d.ticket_price_range).trim() : undefined,
+    min_price_inr: d.min_price_inr !== undefined ? Number(d.min_price_inr) : undefined,
+    max_price_inr: d.max_price_inr !== undefined ? Number(d.max_price_inr) : undefined,
     price_source: d.price_source ? String(d.price_source).trim() : undefined,
+    source_notes: d.source_notes ? String(d.source_notes).trim() : undefined,
+    source_url: d.source_url ? String(d.source_url).trim() : undefined,
+    contact_verified: d.contact_verified ? String(d.contact_verified).trim() : undefined,
+    themes_count: d.themes_count !== undefined ? Number(d.themes_count) : undefined,
+    highlights: Array.isArray(d.highlights) ? d.highlights : undefined,
     verification_status: d.verification_status ?? "unverified",
+    publication_status: d.publication_status ?? "published",
     is_active: d.is_active ?? true,
   }))
   .handler(async ({ data, context }) => {
     const admin = await assertAdminCaller(context.userId, context.claims?.email, context.supabase);
     const db = await getAdminDb(context);
 
+    const payload: any = {
+      title: data.title,
+      venue: data.venue,
+      city: data.city,
+      state: data.state,
+      area: data.area ?? null,
+      address: data.address ?? null,
+      start_date: data.start_date ?? null,
+      end_date: data.end_date ?? null,
+      start_time: data.start_time ?? null,
+      end_time: data.end_time ?? null,
+      dates: data.dates ? JSON.stringify(data.dates) : undefined,
+      organizer: data.organizer ?? null,
+      poster_url: data.poster_url ?? null,
+      booking_url: data.booking_url ?? null,
+      ticket_price_range: data.ticket_price_range ?? null,
+      min_price_inr: data.min_price_inr ?? null,
+      max_price_inr: data.max_price_inr ?? null,
+      price_source: data.price_source ?? null,
+      source_notes: data.source_notes ?? null,
+      source_url: data.source_url ?? null,
+      contact_verified: data.contact_verified ?? null,
+      themes_count: data.themes_count ?? null,
+      highlights: data.highlights ? JSON.stringify(data.highlights) : undefined,
+      verification_status: data.verification_status,
+      publication_status: data.publication_status,
+      is_active: data.is_active,
+      updated_at: new Date().toISOString(),
+    };
+
+    if (data.slug) {
+      payload.slug = data.slug;
+    }
+
     if (data.id) {
       const { error } = await db
         .from("events")
-        .update({
-          title: data.title,
-          venue: data.venue,
-          city: data.city,
-          organizer: data.organizer ?? null,
-          booking_url: data.booking_url ?? null,
-          ticket_price_range: data.ticket_price_range ?? null,
-          price_source: data.price_source ?? null,
-          verification_status: data.verification_status,
-          is_active: data.is_active,
-          updated_at: new Date().toISOString(),
-        })
+        .update(payload)
         .eq("id", data.id);
       if (error) throw error;
     } else {
       const { error } = await db
         .from("events")
-        .insert({
-          title: data.title,
-          venue: data.venue,
-          city: data.city,
-          organizer: data.organizer ?? null,
-          booking_url: data.booking_url ?? null,
-          ticket_price_range: data.ticket_price_range ?? null,
-          price_source: data.price_source ?? null,
-          verification_status: data.verification_status,
-          is_active: data.is_active,
-        });
+        .insert(payload);
       if (error) throw error;
     }
 
@@ -612,7 +661,96 @@ export const saveAdminEvent = createServerFn({ method: "POST" })
       actor_email: admin.email,
       action: data.id ? "UPDATE_EVENT" : "CREATE_EVENT",
       target_id: data.id ?? data.title,
-      details: { title: data.title, venue: data.venue },
+      details: { title: data.title, venue: data.venue, status: data.verification_status },
+    });
+
+    return { ok: true };
+  });
+
+/**
+ * Verify event listing with admin checklist verification stamp.
+ */
+export const verifyAdminEvent = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .validator((d: { eventId: string; verified: boolean; notes?: string | undefined }) => ({
+    eventId: String(d.eventId).trim(),
+    verified: Boolean(d.verified),
+    notes: d.notes ? String(d.notes).trim() : undefined,
+  }))
+  .handler(async ({ data, context }) => {
+    const admin = await assertAdminCaller(context.userId, context.claims?.email, context.supabase);
+    const db = await getAdminDb(context);
+
+    const { error } = await db
+      .from("events")
+      .update({
+        verification_status: data.verified ? "verified" : "unverified",
+        verified_at: data.verified ? new Date().toISOString() : null,
+        verified_by: data.verified ? context.userId : null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", data.eventId);
+
+    if (error) throw error;
+
+    await db.from("admin_audit_logs").insert({
+      actor_id: context.userId,
+      actor_email: admin.email,
+      action: data.verified ? "VERIFY_EVENT" : "UNVERIFY_EVENT",
+      target_id: data.eventId,
+      details: { notes: data.notes },
+    });
+
+    return { ok: true, status: data.verified ? "verified" : "unverified" };
+  });
+
+/**
+ * List community event suggestions for admin moderation.
+ */
+export const listAdminEventSuggestions = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    await assertAdminCaller(context.userId, context.claims?.email, context.supabase);
+    const db = await getAdminDb(context);
+
+    const { data: suggestions, error } = await db
+      .from("event_suggestions")
+      .select(`
+        *,
+        profiles:user_id (first_name, email, photo_path)
+      `)
+      .order("created_at", { ascending: false });
+
+    if (error) throw error;
+    return suggestions ?? [];
+  });
+
+/**
+ * Resolve community event suggestion (approve / reject).
+ */
+export const resolveAdminEventSuggestion = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .validator((d: { suggestionId: string; action: "approved" | "rejected" }) => ({
+    suggestionId: String(d.suggestionId).trim(),
+    action: d.action,
+  }))
+  .handler(async ({ data, context }) => {
+    const admin = await assertAdminCaller(context.userId, context.claims?.email, context.supabase);
+    const db = await getAdminDb(context);
+
+    const { error } = await db
+      .from("event_suggestions")
+      .update({ status: data.action })
+      .eq("id", data.suggestionId);
+
+    if (error) throw error;
+
+    await db.from("admin_audit_logs").insert({
+      actor_id: context.userId,
+      actor_email: admin.email,
+      action: data.action === "approved" ? "APPROVE_EVENT_SUGGESTION" : "REJECT_EVENT_SUGGESTION",
+      target_id: data.suggestionId,
+      details: { action: data.action },
     });
 
     return { ok: true };

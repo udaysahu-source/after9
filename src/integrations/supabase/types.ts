@@ -132,47 +132,284 @@ export type Database = {
         Row: {
           id: string
           title: string
+          slug: string | null
+          description: string | null
           venue: string
+          area: string | null
+          address: string | null
           city: string
+          state: string
+          start_date: string | null
+          end_date: string | null
+          start_time: string | null
+          end_time: string | null
+          poster_url: string | null
+          themes_count: number | null
+          highlights: Json
+          additional_programs: Json
+          contact_unverified: Json
+          contact_verified: string | null
+          entry_rules: Json
+          pass_categories: Json
+          min_price_inr: number | null
+          max_price_inr: number | null
+          source_notes: string | null
+          source_url: string | null
           dates: Json
           organizer: string | null
           booking_url: string | null
           ticket_price_range: string | null
           price_source: string | null
           verification_status: string
+          publication_status: string
           is_active: boolean
+          verified_at: string | null
+          verified_by: string | null
           created_at: string
           updated_at: string
         }
         Insert: {
           id?: string
           title: string
+          slug?: string | null
+          description?: string | null
           venue: string
+          area?: string | null
+          address?: string | null
           city?: string
+          state?: string
+          start_date?: string | null
+          end_date?: string | null
+          start_time?: string | null
+          end_time?: string | null
+          poster_url?: string | null
+          themes_count?: number | null
+          highlights?: Json
+          additional_programs?: Json
+          contact_unverified?: Json
+          contact_verified?: string | null
+          entry_rules?: Json
+          pass_categories?: Json
+          min_price_inr?: number | null
+          max_price_inr?: number | null
+          source_notes?: string | null
+          source_url?: string | null
           dates?: Json
           organizer?: string | null
           booking_url?: string | null
           ticket_price_range?: string | null
           price_source?: string | null
           verification_status?: string
+          publication_status?: string
           is_active?: boolean
+          verified_at?: string | null
+          verified_by?: string | null
           created_at?: string
           updated_at?: string
         }
         Update: {
           id?: string
           title?: string
+          slug?: string | null
+          description?: string | null
           venue?: string
+          area?: string | null
+          address?: string | null
           city?: string
+          state?: string
+          start_date?: string | null
+          end_date?: string | null
+          start_time?: string | null
+          end_time?: string | null
+          poster_url?: string | null
+          themes_count?: number | null
+          highlights?: Json
+          additional_programs?: Json
+          contact_unverified?: Json
+          contact_verified?: string | null
+          entry_rules?: Json
+          pass_categories?: Json
+          min_price_inr?: number | null
+          max_price_inr?: number | null
+          source_notes?: string | null
+          source_url?: string | null
           dates?: Json
           organizer?: string | null
           booking_url?: string | null
           ticket_price_range?: string | null
           price_source?: string | null
           verification_status?: string
+          publication_status?: string
           is_active?: boolean
+          verified_at?: string | null
+          verified_by?: string | null
           created_at?: string
           updated_at?: string
+        }
+        Relationships: []
+      }
+      saved_events: {
+        Row: {
+          id: string
+          user_id: string
+          event_id: string
+          notes: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          event_id: string
+          notes?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          event_id?: string
+          notes?: string | null
+          created_at?: string
+        }
+        Relationships: []
+      }
+      group_plans: {
+        Row: {
+          id: string
+          creator_id: string
+          event_id: string
+          plan_date: string
+          proposed_time: string | null
+          meeting_point: string | null
+          notes: string | null
+          status: string
+          safety_acknowledged: boolean
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          creator_id: string
+          event_id: string
+          plan_date: string
+          proposed_time?: string | null
+          meeting_point?: string | null
+          notes?: string | null
+          status?: string
+          safety_acknowledged?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          creator_id?: string
+          event_id?: string
+          plan_date?: string
+          proposed_time?: string | null
+          meeting_point?: string | null
+          notes?: string | null
+          status?: string
+          safety_acknowledged?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      group_plan_participants: {
+        Row: {
+          id: string
+          plan_id: string
+          user_id: string
+          status: string
+          responded_at: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          plan_id: string
+          user_id: string
+          status?: string
+          responded_at?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          plan_id?: string
+          user_id?: string
+          status?: string
+          responded_at?: string | null
+          created_at?: string
+        }
+        Relationships: []
+      }
+      event_suggestions: {
+        Row: {
+          id: string
+          user_id: string
+          name: string
+          city: string
+          dates: string
+          venue: string
+          organizer: string | null
+          source_link: string | null
+          poster_url: string | null
+          notes: string | null
+          status: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          name: string
+          city?: string
+          dates: string
+          venue: string
+          organizer?: string | null
+          source_link?: string | null
+          poster_url?: string | null
+          notes?: string | null
+          status?: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          name?: string
+          city?: string
+          dates?: string
+          venue?: string
+          organizer?: string | null
+          source_link?: string | null
+          poster_url?: string | null
+          notes?: string | null
+          status?: string
+          created_at?: string
+        }
+        Relationships: []
+      }
+      event_attendance_interests: {
+        Row: {
+          id: string
+          user_id: string
+          event_id: string
+          visibility: string
+          status: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          event_id: string
+          visibility?: string
+          status?: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          event_id?: string
+          visibility?: string
+          status?: string
+          created_at?: string
         }
         Relationships: []
       }

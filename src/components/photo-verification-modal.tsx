@@ -16,6 +16,8 @@ import {
   Lock,
   ArrowRight,
   RotateCcw,
+  HelpCircle,
+  Upload,
 } from "lucide-react";
 import { toast } from "sonner";
 import { submitLivePhotoVerification } from "@/lib/verify.functions";
@@ -49,6 +51,48 @@ export function PhotoVerificationModal({
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const handleSelfieFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      toast.error("Please choose a valid photo.");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        const maxDim = 1200;
+        let w = img.width;
+        let h = img.height;
+        if (w > maxDim || h > maxDim) {
+          if (w > h) {
+            h = Math.round((h * maxDim) / w);
+            w = maxDim;
+          } else {
+            w = Math.round((w * maxDim) / h);
+            h = maxDim;
+          }
+        }
+        const canvas = document.createElement("canvas");
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext("2d");
+        if (ctx) {
+          ctx.drawImage(img, 0, 0, w, h);
+          const compressed = canvas.toDataURL("image/jpeg", 0.85);
+          setCapturedDataUrl(compressed);
+          stopCamera();
+          setCameraError(null);
+          setStep("preview");
+        }
+      };
+      img.src = reader.result as string;
+    };
+    reader.readAsDataURL(file);
+  };
 
   // Stop camera media stream
   const stopCamera = useCallback(() => {
@@ -265,16 +309,65 @@ export function PhotoVerificationModal({
           {step === "camera" && (
             <div className="space-y-4">
               {cameraError ? (
-                <div className="rounded-xl border border-destructive/40 bg-destructive/10 p-4 text-center space-y-3">
-                  <AlertTriangle className="h-7 w-7 text-destructive mx-auto" />
-                  <p className="text-xs text-destructive font-semibold leading-relaxed">{cameraError}</p>
-                  <button
-                    type="button"
-                    onClick={startCamera}
-                    className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-3.5 py-2 text-xs font-bold text-primary-foreground"
-                  >
-                    <RefreshCw className="h-3 w-3" /> Retry Camera
-                  </button>
+                <div className="rounded-2xl border border-destructive/30 bg-destructive/5 p-4 text-center space-y-4 animate-fade-in">
+                  <div className="flex h-12 w-12 mx-auto items-center justify-center rounded-full bg-destructive/15 text-destructive">
+                    <AlertTriangle className="h-6 w-6" />
+                  </div>
+
+                  <div>
+                    <h3 className="text-sm font-bold text-destructive">Camera Permission Denied</h3>
+                    <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
+                      {cameraError}
+                    </p>
+                  </div>
+
+                  {/* Browser Permission Steps */}
+                  <div className="rounded-xl border border-border/80 bg-background/80 p-3 text-left text-[11px] space-y-1.5 text-muted-foreground">
+                    <p className="font-bold text-foreground flex items-center gap-1.5">
+                      <HelpCircle className="h-3.5 w-3.5 text-action" />
+                      To enable live camera:
+                    </p>
+                    <p>1. Tap the <b>lock or site settings icon</b> (🔒 or ⚙️) next to the URL in your browser.</p>
+                    <p>2. Set <b>Camera</b> to <b>Allow</b>, then tap Retry.</p>
+                  </div>
+
+                  {/* Device Camera Fallback */}
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    capture="user"
+                    className="sr-only"
+                    onChange={handleSelfieFileUpload}
+                  />
+
+                  <div className="flex flex-col gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-action py-2.5 text-xs font-bold text-action-foreground shadow-sm transition hover:brightness-105 active:scale-98"
+                    >
+                      <Camera className="h-4 w-4" />
+                      <span>Take Selfie with Device Camera</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={startCamera}
+                      className="inline-flex w-full items-center justify-center gap-1.5 rounded-xl border border-border bg-card py-2 text-xs font-semibold text-foreground hover:bg-muted transition"
+                    >
+                      <RefreshCw className="h-3.5 w-3.5" />
+                      <span>Retry Live Viewfinder</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => onOpenChange(false)}
+                      className="text-xs text-muted-foreground hover:text-foreground pt-1.5 font-medium underline"
+                    >
+                      Skip for Now (Verify Later in Profile)
+                    </button>
+                  </div>
                 </div>
               ) : (
                 <div className="relative aspect-[3/4] w-full overflow-hidden rounded-2xl bg-black border border-border">

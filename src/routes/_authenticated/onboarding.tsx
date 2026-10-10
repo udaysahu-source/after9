@@ -415,7 +415,6 @@ function Step({
             url={photo.preview ?? (photo.path ? urls[photo.path] : undefined)}
             onUploaded={(path, preview) => {
               setPhoto({ path, preview });
-              setLiveVerificationOpen(true);
             }}
             onRequestVerification={() => setLiveVerificationOpen(true)}
           />

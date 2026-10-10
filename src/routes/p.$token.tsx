@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Shell, AppIcon, Wordmark, Btn, Dandiya } from "@/components/after9";
-import { FESTIVAL, NIGHTS, goingNights, usePhotoUrls } from "@/lib/after9";
+import { FESTIVAL, NIGHTS, goingNights, usePhotoUrls, invalidatePhotoUrl } from "@/lib/after9";
 import { ExternalLink, Lock, Calendar, School, Instagram, Youtube, Linkedin, Twitter, Link as LinkIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -44,6 +44,7 @@ function PublicProfilePage() {
   const [profile, setProfile] = useState<PublicProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
+  const [photoError, setPhotoError] = useState(false);
 
   useEffect(() => {
     async function load() {
@@ -130,11 +131,15 @@ function PublicProfilePage() {
         <article className="overflow-hidden rounded-3xl border border-border/80 bg-card shadow-md">
           {/* Portrait Photo */}
           <div className="relative aspect-[4/5] w-full overflow-hidden bg-muted">
-            {photoUrl ? (
+            {photoUrl && !photoError ? (
               <img
                 src={photoUrl}
                 alt={profile.first_name}
                 className="h-full w-full object-cover"
+                onError={() => {
+                  invalidatePhotoUrl(profile.photo_path);
+                  setPhotoError(true);
+                }}
               />
             ) : (
               <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-[#2A1428] to-[#140816] font-display text-7xl font-extrabold text-primary-foreground">

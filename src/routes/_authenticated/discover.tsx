@@ -31,6 +31,7 @@ import { Analytics } from "@/lib/launch-analytics";
 import { toast } from "sonner";
 import { NotificationBell } from "@/components/notifications-popover";
 import { EarlyCommunityView } from "@/components/early-community-view";
+import { MatchCommunicationScreen } from "@/components/match-communication-screen";
 
 export const Route = createFileRoute("/_authenticated/discover")({
   head: () => ({
@@ -121,7 +122,19 @@ function Discover() {
       ]);
 
       if (feedRes.error) throw feedRes.error;
-      setFeed(feedRes.data ?? []);
+      const returnedCandidates = feedRes.data ?? [];
+      setFeed(returnedCandidates);
+
+      // Instrument real, tamper-resistant impressions across eligible candidate set
+      if (returnedCandidates.length > 0) {
+        const batchToken = `batch_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+        Promise.resolve(
+          supabase.rpc("record_discovery_impressions", {
+            p_profile_ids: returnedCandidates.map((x) => x.id),
+            p_batch_id: batchToken,
+          })
+        ).catch(() => {});
+      }
 
       if (diagRes.data && typeof diagRes.data === "object" && !("error" in diagRes.data)) {
         setDiagnostics(diagRes.data as unknown as DiscoveryDiagnostics);
@@ -141,13 +154,10 @@ function Discover() {
   useEffect(() => {
     loadDiscoveryData();
 
-    // Real-time synchronization: when new users register, onboard, or nights change
-    const channelTopic = `discover_live_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+    // Real-time synchronization: listen for admin launch control events (e.g. Discover going live)
+    // Exclude global wildcard on `profiles` table to eliminate thundering herd storms across connected clients
     const channel = supabase
-      .channel(channelTopic)
-      .on("postgres_changes", { event: "*", schema: "public", table: "profiles" }, () => {
-        loadDiscoveryData();
-      })
+      .channel("discover_launch_control")
       .on("postgres_changes", { event: "*", schema: "public", table: "launch_control" }, (payload: any) => {
         if (payload?.new?.discover_enabled) {
           toast.success("🎉 Discover matching is now LIVE! Start swiping to find your Garba crew.");
@@ -179,9 +189,9 @@ function Discover() {
         .then(() => localStorage.removeItem("after9.ref"));
   }, []);
 
-  const deck = (feed ?? [])
-    .filter((x) => (night ? goingNights(x.nights).includes(night) : true))
-    .sort((a, b) => (me ? vibe(me.quiz, me.nights, b) - vibe(me.quiz, me.nights, a) : 0));
+  // Candidates returned by discover_feed() are adaptively balanced and scored on the server
+  // Filter by selected Garba night while preserving the balanced candidate order
+  const deck = (feed ?? []).filter((x) => (night ? goingNights(x.nights).includes(night) : true));
   const [top, second] = deck;
 
   const cardUrls = usePhotoUrls(deck.slice(0, 3).map((d) => d.photo_path));
@@ -515,7 +525,16 @@ function Discover() {
 
       <main className="mx-auto flex w-full max-w-md md:max-w-4xl lg:max-w-5xl flex-1 flex-col px-5 pb-20 md:pb-28">
         {discoveryState === "normal" && top ? (
-          <div className="md:grid md:grid-cols-12 md:gap-8 md:items-start">
+          <>
+            {deck.length <= 3 && (
+              <div className="mb-3 text-center animate-fade-in">
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-action/30 bg-action/10 px-3.5 py-1 text-xs font-bold text-action shadow-2xs">
+                  <span>✨</span>
+                  <span>Your Garba circle is growing. Try another night.</span>
+                </span>
+              </div>
+            )}
+            <div className="md:grid md:grid-cols-12 md:gap-8 md:items-start">
             {/* Stage (Left Column) */}
             <div className="flex flex-col md:col-span-6 lg:col-span-6">
               <div className="relative flex flex-1 min-h-[380px] sm:min-h-[440px] max-h-[min(640px,calc(100dvh-230px))]">
@@ -602,6 +621,7 @@ function Discover() {
               />
             </div>
           </div>
+        </>
         ) : (
           <DiscoveryStateView
             state={discoveryState === "normal" ? "zero_users" : discoveryState}
@@ -621,75 +641,19 @@ function Discover() {
 
       <BottomNav />
 
-      {clash && (
-        <div className="fixed inset-0 z-50 flex animate-fade-in flex-col items-center justify-center bg-primary px-8 text-center text-primary-foreground">
-          {/* Festival Clash Signature Animation */}
-          <div className="relative mb-2 flex h-36 w-36 items-center justify-center">
-            <div className="absolute inset-0 rounded-full bg-action/30 animate-clack-burst pointer-events-none" />
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              className="absolute h-32 w-32 text-action animate-clack-left"
-              aria-hidden
-            >
-              <path d="M4 21 L18 3" stroke="currentColor" strokeWidth="2.8" strokeLinecap="round" />
-              <path d="M7 17 l2 1" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-            </svg>
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              className="absolute h-32 w-32 text-card animate-clack-right"
-              aria-hidden
-            >
-              <path d="M20 21 L6 3" stroke="currentColor" strokeWidth="2.8" strokeLinecap="round" />
-              <path
-                d="M17 17 l-2 1"
-                stroke="currentColor"
-                strokeWidth="1.6"
-                strokeLinecap="round"
-              />
-            </svg>
-          </div>
-
-          <p className="font-display text-sm tracking-[0.35em] font-extrabold text-action animate-clack-slam">
-            CLACK!
-          </p>
-          <h2 className="mt-2 font-display text-4xl sm:text-5xl font-extrabold animate-rise">
-            It's a clash.
-          </h2>
-          <p className="mt-3 max-w-xs text-[15px] opacity-90 animate-rise [animation-delay:120ms]">
-            You and <b className="text-action">{clash.first_name}</b> both sent a Dandiya. Chat is
-            now open.
-          </p>
-
-          {me && shared(me.nights, clash.nights).length > 0 && (
-            <div className="mt-4 flex flex-wrap justify-center gap-1.5 animate-rise [animation-delay:180ms]">
-              {shared(me.nights, clash.nights).map((sn) => (
-                <span
-                  key={sn}
-                  className="rounded-full bg-card/15 px-3 py-1 text-xs font-semibold text-card backdrop-blur-xs"
-                >
-                  Night {sn}
-                </span>
-              ))}
-            </div>
-          )}
-
-          <div className="mt-8 flex w-full max-w-xs flex-col gap-2.5 animate-rise [animation-delay:240ms]">
-            <Link to="/chat/$id" params={{ id: clash.id }} className="w-full">
-              <Btn className="w-full shadow-lg">
-                <ChatIcon className="h-5 w-5" />
-                <span>Chat with {clash.first_name}</span>
-              </Btn>
-            </Link>
-            <button
-              className="touch-tactile py-3 text-sm opacity-80 transition hover:opacity-100"
-              onClick={() => setClash(null)}
-            >
-              Keep discovering
-            </button>
-          </div>
-        </div>
+      {clash && me && (
+        <MatchCommunicationScreen
+          partner={clash}
+          myId={me.id}
+          myNights={me.nights}
+          onClose={() => setClash(null)}
+          onOpenChat={() => {
+            const cid = clash.id;
+            setClash(null);
+            nav({ to: "/chat/$id", params: { id: cid } });
+          }}
+          mode="fullscreen"
+        />
       )}
 
       <InviteShareModal open={inviteModalOpen} onOpenChange={setInviteModalOpen} userProfile={me} />

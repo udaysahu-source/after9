@@ -17,11 +17,13 @@ import {
   goingNights,
   useMyProfile,
   usePhotoUrls,
+  invalidatePhotoUrl,
   validateBirthDate,
   type Attendance,
   type ProfileRow,
 } from "@/lib/after9";
 import { verifyProfile } from "@/lib/verify.functions";
+import { checkAdminStatus } from "@/lib/admin.functions";
 import { drawInviteCard } from "@/lib/share-cards";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -51,6 +53,7 @@ import {
 import { ShareCardStudio } from "@/components/share-card-studio";
 import { PhotoVerificationModal } from "@/components/photo-verification-modal";
 import { SocialLinksManager } from "@/components/social-links-manager";
+import { ProfileInstagramField } from "@/components/profile-instagram-field";
 import { ProfileVisibilityMeter } from "@/components/profile-visibility-meter";
 import { getMySocialLinks, type SocialLinkRow } from "@/lib/social-links";
 import { NotificationBell } from "@/components/notifications-popover";
@@ -437,9 +440,16 @@ function Profile() {
                 {activeCategory === "socials" && (
                   <div className="space-y-4">
                     <p className="text-xs text-muted-foreground leading-relaxed">
-                      Add your social links below. By default, links remain strictly private. You can choose to display them on your public share card or share only with mutual matches.
+                      Connect your Instagram for post-clash conversations. Handles remain strictly private by default and are only shared with mutual Dandiya matches when you both consent.
                     </p>
-                    <SocialLinksManager userId={p.id} onLinksChanged={setSocials} />
+                    <ProfileInstagramField
+                      userId={p.id}
+                      onHandleChange={() => getMySocialLinks(p.id).then(setSocials)}
+                    />
+                    <div className="pt-2">
+                      <p className="text-xs font-bold text-foreground mb-2">Other Social Networks</p>
+                      <SocialLinksManager userId={p.id} onLinksChanged={setSocials} />
+                    </div>
                   </div>
                 )}
 
@@ -558,6 +568,7 @@ function MyProfileCategory({
     setSaving(true);
     try {
       if (p.photo_path && p.photo_path !== photo.path) {
+        invalidatePhotoUrl(p.photo_path);
         await supabase.storage.from("photos").remove([p.photo_path]);
       }
       await onSave({
@@ -1237,6 +1248,14 @@ function InvitationsCategory({ p }: { p: ProfileRow }) {
 // ==========================================
 function AccountCategory({ p }: { p: ProfileRow }) {
   const nav = useNavigate();
+  const checkAdmin = useServerFn(checkAdminStatus);
+  const [isAdmin, setIsAdmin] = useState(false);
+
+  useEffect(() => {
+    checkAdmin()
+      .then((res) => setIsAdmin(Boolean(res?.isAdmin)))
+      .catch(() => setIsAdmin(false));
+  }, [checkAdmin]);
 
   const handleSignOut = async () => {
     if (!confirm("Are you sure you want to sign out?")) return;
@@ -1248,6 +1267,7 @@ function AccountCategory({ p }: { p: ProfileRow }) {
     if (!confirm("Delete your profile, photo and chats permanently? This cannot be undone.")) return;
     try {
       if (p.photo_path) {
+        invalidatePhotoUrl(p.photo_path);
         await supabase.storage.from("photos").remove([p.photo_path]);
       }
       await supabase.from("profiles").delete().eq("id", p.id);
@@ -1266,26 +1286,28 @@ function AccountCategory({ p }: { p: ProfileRow }) {
         <p className="text-xs text-muted-foreground">Verification: <b className="text-foreground">{p.verification_status}</b></p>
       </div>
 
-      <div className="rounded-2xl border border-primary/30 bg-primary/5 p-4 space-y-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span className="text-base">👑</span>
-            <h3 className="font-display text-sm font-bold text-primary">Administrator Controls</h3>
+      {isAdmin && (
+        <div className="rounded-2xl border border-primary/30 bg-primary/5 p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="text-base">👑</span>
+              <h3 className="font-display text-sm font-bold text-primary">Administrator Controls</h3>
+            </div>
+            <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-primary">
+              Admin Only
+            </span>
           </div>
-          <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-primary">
-            Protected
-          </span>
+          <p className="text-xs text-muted-foreground leading-relaxed">
+            Access platform metrics, user moderation, referral audits, and Discover launch control.
+          </p>
+          <Link
+            to="/admin"
+            className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-4 py-2.5 text-xs font-bold text-primary-foreground shadow-xs transition hover:opacity-90"
+          >
+            Open Admin Control Center →
+          </Link>
         </div>
-        <p className="text-xs text-muted-foreground leading-relaxed">
-          Access platform metrics, user moderation, referral audits, and Discover launch control.
-        </p>
-        <Link
-          to="/admin"
-          className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-4 py-2.5 text-xs font-bold text-primary-foreground shadow-xs transition hover:opacity-90"
-        >
-          Open Admin Control Center →
-        </Link>
-      </div>
+      )}
 
       <div className="rounded-2xl border border-border bg-card p-4 space-y-3">
         <h3 className="font-display text-sm font-bold text-primary">Session Management</h3>

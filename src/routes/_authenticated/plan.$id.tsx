@@ -58,6 +58,7 @@ function EventDetailPage() {
   const [attendanceVisibility, setAttendanceVisibility] = useState<"mutual_matches" | "private">("mutual_matches");
   const [loading, setLoading] = useState(true);
   const [userId, setUserId] = useState<string | null>(null);
+  const [posterError, setPosterError] = useState(false);
 
   // Group plan modal
   const [groupPlanModalOpen, setGroupPlanModalOpen] = useState(false);
@@ -237,11 +238,12 @@ function EventDetailPage() {
 
       {/* Hero Poster */}
       <div className="relative h-64 md:h-80 w-full overflow-hidden bg-gradient-to-br from-plum-950 via-primary to-plum-900 flex items-center justify-center">
-        {event.poster_url ? (
+        {event.poster_url && !posterError ? (
           <img
             src={event.poster_url}
             alt={event.title}
             className="h-full w-full object-cover"
+            onError={() => setPosterError(true)}
           />
         ) : (
           <div className="flex flex-col items-center justify-center p-8 text-center text-ivory/90">

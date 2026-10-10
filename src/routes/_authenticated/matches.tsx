@@ -39,8 +39,8 @@ function Matches() {
       <div className="px-5 pb-2 pt-6 md:pt-10 flex flex-col md:flex-row md:items-baseline md:justify-between gap-2">
         <div className="flex items-center justify-between w-full md:w-auto">
           <div>
-            <h1 className="font-display text-4xl font-extrabold text-primary tracking-tight">Chats</h1>
-            <p className="mt-1 text-sm text-muted-foreground">Everyone you clashed with. Tap to keep talking.</p>
+            <h1 className="font-display text-4xl font-extrabold text-primary tracking-tight">Clashes</h1>
+            <p className="mt-1 text-sm text-muted-foreground">Everyone you clashed with. Connect on Instagram, plan a night, or message.</p>
           </div>
           <div className="md:hidden">
             <NotificationBell userId={me} />

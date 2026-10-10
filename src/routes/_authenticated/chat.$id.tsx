@@ -9,6 +9,7 @@ import { formatEventDate } from "@/components/plan-components";
 import { cn } from "@/lib/utils";
 import { CalendarDays, ExternalLink, ShieldCheck, Sparkles, X, Check } from "lucide-react";
 import { toast } from "sonner";
+import { MatchCommunicationScreen } from "@/components/match-communication-screen";
 import type { Database } from "@/integrations/supabase/types";
 
 type Msg = Database["public"]["Tables"]["messages"]["Row"];
@@ -52,11 +53,17 @@ function Chat() {
   useEffect(() => {
     let uid = "";
     supabase.auth.getUser().then(async ({ data }) => {
-      uid = data.user!.id; setMe(uid);
+      if (!data?.user) return;
+      uid = data.user.id;
+      setMe(uid);
       const { data: ms } = await supabase.rpc("my_matches");
       setOther(ms?.find((m) => m.id === id) ?? null);
-      const { data: rows } = await supabase.from("messages").select("*")
-        .or(`and(sender_id.eq.${uid},recipient_id.eq.${id}),and(sender_id.eq.${id},recipient_id.eq.${uid})`).order("created_at");
+      const { data: rows } = await supabase
+        .from("messages")
+        .select("id, sender_id, recipient_id, body, created_at")
+        .or(`and(sender_id.eq.${uid},recipient_id.eq.${id}),and(sender_id.eq.${id},recipient_id.eq.${uid})`)
+        .order("created_at", { ascending: true })
+        .limit(100);
       setMsgs(rows ?? []);
       // Load matched socials guarded by database-level mutual consent
       const { data: socs } = await supabase.rpc("get_matched_socials", { target_user_id: id });
@@ -64,7 +71,7 @@ function Chat() {
       // Clear unread notifications for this chat
       supabase.from("notifications").update({ read: true }).eq("user_id", uid).eq("action_url", `/chat/${id}`);
     });
-    const chTopic = `chat-${id}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    const chTopic = `chat:${id}`;
     const ch = supabase.channel(chTopic)
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "messages" }, (pl) => {
         const m = pl.new as Msg;
@@ -101,6 +108,7 @@ function Chat() {
     const { data, error } = await supabase.from("messages").insert({ sender_id: me, recipient_id: id, body }).select().single();
     if (error) {
       console.warn("[Chat] Send failed:", error.message);
+      toast.error(error.message || "Failed to send message");
       return;
     }
     if (data) setMsgs((x) => (x.some((y) => y.id === data.id) ? x : [...x, data]));
@@ -191,28 +199,18 @@ function Chat() {
       </header>
 
       <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-2.5 px-4 py-5">
-        <div className="mb-4 flex flex-col items-center gap-2 text-center">
-          <span className="flex items-center gap-1 text-action"><Dandiya className="h-5 w-5" /><ChatIcon className="h-6 w-6" /><Dandiya className="h-5 w-5 -scale-x-100" /></span>
-          <p className="max-w-md text-xs text-muted-foreground leading-relaxed">You and {other.first_name} both sent a Dandiya. This chat is just for you two. Be kind, meet in the crowd first.</p>
-          {matchedSocials.length > 0 && (
-            <div className="mt-2 flex flex-wrap items-center justify-center gap-2">
-              {matchedSocials.map((s) => (
-                <a
-                  key={s.platform}
-                  href={s.profile_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1.5 rounded-full border border-border/80 bg-card px-3 py-1 text-xs font-semibold text-primary shadow-2xs transition hover:border-action/60 hover:text-action"
-                >
-                  <span className="text-xs">
-                    {s.platform === "instagram" ? "📸" : s.platform === "snapchat" ? "👻" : s.platform === "youtube" ? "▶️" : s.platform === "x" ? "𝕏" : s.platform === "linkedin" ? "💼" : "🔗"}
-                  </span>
-                  <span>@{s.handle}</span>
-                  <span className="text-[10px] text-muted-foreground">↗</span>
-                </a>
-              ))}
-            </div>
-          )}
+        {/* Primary Contact Option: Instagram Exchange & Garba Plan */}
+        <div className="mb-2">
+          <MatchCommunicationScreen partner={other} myId={me} mode="embedded" />
+        </div>
+
+        {/* Alternative In-App Chat Header */}
+        <div className="my-2 flex items-center gap-3">
+          <div className="h-px flex-1 bg-border/60" />
+          <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
+            In-App Messages (Alternative)
+          </span>
+          <div className="h-px flex-1 bg-border/60" />
         </div>
 
         {/* Messages feed */}

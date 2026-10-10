@@ -1,6 +1,6 @@
 import { createFileRoute, Link, useNavigate, Outlet, useMatch } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import {
   Calendar,
   CalendarDays,
@@ -128,43 +128,118 @@ function PlanPage() {
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
-  // Load events and user itinerary
-  const loadData = async () => {
-    setLoading(true);
+  // Request sequence and abort controllers for race-condition and stale-result protection
+  const reqSeqRef = useRef(0);
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const isMountedRef = useRef(true);
+
+  // Component lifecycle mount/unmount guard
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
+  }, []);
+
+  // Load user itinerary (saved events and group plans) independently from catalog filters
+  const loadUserItinerary = useCallback(async () => {
     try {
-      const [evList, savedList, plansList] = await Promise.all([
-        fetchPublicEvents({
-          data: {
-            city,
-            area: selectedArea !== "all" ? selectedArea : undefined,
-            date: selectedDate ?? undefined,
-            query: debouncedQuery || undefined,
-            verifiedOnly: verifiedOnly || undefined,
-            freeOnly: freeOnly || undefined,
-            hasBookingUrl: hasTicketsOnly || undefined,
-            maxBudget: under500Only ? 500 : undefined,
-            sortBy,
-          },
-        }),
+      const [savedList, plansList] = await Promise.all([
         fetchSaved().catch(() => []),
         fetchGroupPlans().catch(() => []),
       ]);
-
-      setEvents(evList);
+      if (!isMountedRef.current) return;
       setSavedEvents(savedList);
       setGroupPlans(plansList);
-      setSavedIds(new Set(savedList.map((s) => s.event.id)));
+      setSavedIds(new Set(savedList.map((s: any) => s.event.id)));
+    } catch (err) {
+      console.warn("[Plan] Itinerary load error:", err);
+    }
+  }, [fetchSaved, fetchGroupPlans]);
+
+  // Load events catalog according to active filter criteria with stale-result protection
+  const loadEvents = useCallback(async () => {
+    // 1. Abort any previous in-flight request
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
+    // 2. Increment request sequence number
+    const requestId = ++reqSeqRef.current;
+
+    setLoading(true);
+    try {
+      const evList = await fetchPublicEvents({
+        data: {
+          city,
+          area: selectedArea !== "all" ? selectedArea : undefined,
+          date: selectedDate ?? undefined,
+          query: debouncedQuery || undefined,
+          verifiedOnly: verifiedOnly || undefined,
+          freeOnly: freeOnly || undefined,
+          hasBookingUrl: hasTicketsOnly || undefined,
+          maxBudget: under500Only ? 500 : undefined,
+          sortBy,
+        },
+        signal: controller.signal,
+      } as any);
+
+      // 3. Stale-result guard: Only commit if still mounted and this is the latest request
+      if (!isMountedRef.current || requestId !== reqSeqRef.current) {
+        return;
+      }
+
+      setEvents(evList);
     } catch (err: any) {
-      console.warn("[Plan] Load error:", err);
+      // Ignore if aborted, unmounted, or overtaken by newer request
+      if (
+        !isMountedRef.current ||
+        requestId !== reqSeqRef.current ||
+        err?.name === "AbortError" ||
+        controller.signal.aborted
+      ) {
+        return;
+      }
+      console.warn("[Plan] Events load error:", err);
       toast.error("Could not load Garba events. Please retry.");
     } finally {
-      setLoading(false);
+      // Only clear loading state if this is still the active latest request
+      if (isMountedRef.current && requestId === reqSeqRef.current) {
+        setLoading(false);
+      }
     }
-  };
+  }, [
+    fetchPublicEvents,
+    city,
+    selectedArea,
+    selectedDate,
+    debouncedQuery,
+    verifiedOnly,
+    freeOnly,
+    hasTicketsOnly,
+    under500Only,
+    sortBy,
+  ]);
 
+  // Combined loader for full refreshes
+  const loadData = useCallback(async () => {
+    await Promise.all([loadEvents(), loadUserItinerary()]);
+  }, [loadEvents, loadUserItinerary]);
+
+  // Fetch itinerary on mount
   useEffect(() => {
-    loadData();
-  }, [city, selectedDate, debouncedQuery, selectedArea, verifiedOnly, freeOnly, hasTicketsOnly, under500Only, sortBy]);
+    loadUserItinerary();
+  }, [loadUserItinerary]);
+
+  // Fetch catalog only when search or filter criteria change
+  useEffect(() => {
+    loadEvents();
+  }, [loadEvents]);
 
   const activeFiltersCount =
     (selectedArea !== "all" ? 1 : 0) +

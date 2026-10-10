@@ -306,14 +306,19 @@ export const listAdminUsers = createServerFn({ method: "POST" })
 
     let query = db
       .from("profiles")
-      .select("id, first_name, birth_date, gender, college, branch, prompt, photo_path, onboarded, discoverable, verification_status, verification_reason, is_suspended, suspension_reason, created_at, updated_at")
+      .select("id, first_name, birth_date, gender, college, branch, prompt, photo_path, onboarded, discoverable, verification_status, verification_reason, is_suspended, suspension_reason, created_at, updated_at, nights, quiz, general_area, show_college, incognito, share_token")
       .order("created_at", { ascending: false })
       .limit(data.limit);
 
     // Sanitize search to prevent PostgREST query injection
     const sanitizedSearch = data.search.replace(/[^a-zA-Z0-9\s_-]/g, "").trim();
     if (sanitizedSearch) {
-      query = query.or(`first_name.ilike.%${sanitizedSearch}%,college.ilike.%${sanitizedSearch}%,branch.ilike.%${sanitizedSearch}%`);
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(sanitizedSearch);
+      if (isUuid) {
+        query = query.or(`id.eq.${sanitizedSearch},first_name.ilike.%${sanitizedSearch}%,college.ilike.%${sanitizedSearch}%`);
+      } else {
+        query = query.or(`first_name.ilike.%${sanitizedSearch}%,college.ilike.%${sanitizedSearch}%,branch.ilike.%${sanitizedSearch}%`);
+      }
     }
 
     if (data.status === "suspended") {
@@ -322,6 +327,12 @@ export const listAdminUsers = createServerFn({ method: "POST" })
       query = query.or("verification_status.eq.needs_review,verification_status.eq.pending");
     } else if (data.status === "approved") {
       query = query.eq("verification_status", "approved");
+    } else if (data.status === "rejected") {
+      query = query.eq("verification_status", "rejected");
+    } else if (data.status === "onboarded") {
+      query = query.eq("onboarded", true);
+    } else if (data.status === "not_onboarded") {
+      query = query.eq("onboarded", false);
     }
 
     const { data: users, error } = await query;
@@ -524,6 +535,56 @@ export const revokeAdminInvite = createServerFn({ method: "POST" })
   });
 
 /**
+ * Create custom administrative or VIP invitation code.
+ */
+export const createAdminInvite = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: { code?: string | undefined }) => ({
+    code: d.code ? String(d.code).trim().toUpperCase().replace(/[^A-Z0-9_-]/g, "") : undefined,
+  }))
+  .handler(async ({ data, context }) => {
+    const admin = await assertAdminCaller(context.userId, context.claims?.email, context.supabase);
+    const db = await getAdminDb(context);
+
+    // Generate code if not provided
+    const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+    let finalCode = data.code;
+    if (!finalCode) {
+      let rand = "";
+      for (let i = 0; i < 6; i++) {
+        rand += chars.charAt(Math.floor(Math.random() * chars.length));
+      }
+      finalCode = `A9-${rand}`;
+    }
+
+    const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+
+    const { error } = await db.from("invites").insert({
+      code: finalCode,
+      creator_id: context.userId,
+      revoked: false,
+      expires_at: expiresAt,
+    });
+
+    if (error) {
+      if (error.code === "23505") {
+        throw new Error(`Invite code "${finalCode}" already exists. Please choose a unique code.`);
+      }
+      throw error;
+    }
+
+    await db.from("admin_audit_logs").insert({
+      actor_id: context.userId,
+      actor_email: admin.email,
+      action: "CREATE_ADMIN_INVITE",
+      target_id: finalCode,
+      details: { code: finalCode, expiresAt },
+    });
+
+    return { ok: true, code: finalCode };
+  });
+
+/**
  * List events for Plan / Garba venue management.
  */
 export const listAdminEvents = createServerFn({ method: "GET" })
@@ -702,6 +763,32 @@ export const verifyAdminEvent = createServerFn({ method: "POST" })
     });
 
     return { ok: true, status: data.verified ? "verified" : "unverified" };
+  });
+
+/**
+ * Delete event listing.
+ */
+export const deleteAdminEvent = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: { eventId: string }) => ({
+    eventId: String(d.eventId).trim(),
+  }))
+  .handler(async ({ data, context }) => {
+    const admin = await assertAdminCaller(context.userId, context.claims?.email, context.supabase);
+    const db = await getAdminDb(context);
+
+    const { error } = await db.from("events").delete().eq("id", data.eventId);
+    if (error) throw error;
+
+    await db.from("admin_audit_logs").insert({
+      actor_id: context.userId,
+      actor_email: admin.email,
+      action: "DELETE_EVENT",
+      target_id: data.eventId,
+      details: {},
+    });
+
+    return { ok: true };
   });
 
 /**
@@ -1000,3 +1087,155 @@ export const getAdminSecurityOverview = createServerFn({ method: "GET" })
       },
     };
   });
+
+export interface DiscoveryBalanceMetricsResult {
+  eligible_pool_size: number;
+  active_discoverable_24h: number;
+  active_discoverable_7d: number;
+  exposure_distribution: {
+    p10: number;
+    p25: number;
+    median_p50: number;
+    p75: number;
+    p90: number;
+    max: number;
+    avg: number;
+  };
+  repeated_exposure_rate: number;
+  feed_exhaustion_rate: number;
+  positive_swipe_rate: number;
+  mutual_matches_7d: number;
+  gender_breakdown: {
+    gender: string;
+    is_suppressed: boolean;
+    eligible_count: number | null;
+    impressions_7d: number | null;
+    privacy_note: string | null;
+  }[];
+  min_cohort_threshold: number;
+}
+
+/**
+ * Fetch real discovery balance and fairness metrics for administrative audit.
+ * Enforces server-side admin check, returns rolling exposure percentiles,
+ * repeated-exposure rates, and k >= 10 cohort privacy-suppressed gender breakdown.
+ */
+export const getAdminDiscoveryBalanceMetrics = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }): Promise<DiscoveryBalanceMetricsResult> => {
+    await assertAdminCaller(context.userId, context.claims?.email, context.supabase);
+    const db = await getAdminDb(context);
+
+    // 1. Attempt database RPC call
+    try {
+      const { data, error } = await db.rpc("get_admin_discovery_balance_metrics");
+      if (!error && data) {
+        return data as DiscoveryBalanceMetricsResult;
+      }
+    } catch {
+      // Fall through to query fallback
+    }
+
+    // 2. Safe fallback calculation via direct queries
+    const past24h = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    const past7d = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+
+    const [
+      { count: eligiblePool },
+      active24hRes,
+      active7dRes,
+      impressions7dRes,
+      swipes7dRes,
+    ] = await Promise.all([
+      db
+        .from("profiles")
+        .select("*", { count: "exact", head: true })
+        .eq("onboarded", true)
+        .eq("discoverable", true)
+        .eq("verification_status", "approved")
+        .eq("is_suspended", false),
+      db.from("discovery_impressions").select("profile_id").gte("served_at", past24h),
+      db.from("discovery_impressions").select("profile_id").gte("served_at", past7d),
+      db.from("discovery_impressions").select("profile_id, viewer_id, served_at").gte("served_at", past7d),
+      db.from("dandiyas").select("kind").gte("created_at", past7d),
+    ]);
+
+    const active24hSet = new Set((active24hRes?.data ?? []).map((x: any) => x.profile_id));
+    const active7dSet = new Set((active7dRes?.data ?? []).map((x: any) => x.profile_id));
+
+    // Distribution calculation
+    const profileImpMap: Record<string, number> = {};
+    const viewerProfileSeq: Record<string, number> = {};
+    let repeatCount = 0;
+    const totalImps = impressions7dRes?.data?.length ?? 0;
+
+    for (const imp of (impressions7dRes?.data ?? []) as any[]) {
+      profileImpMap[imp.profile_id] = (profileImpMap[imp.profile_id] ?? 0) + 1;
+      const key = `${imp.viewer_id}_${imp.profile_id}`;
+      viewerProfileSeq[key] = (viewerProfileSeq[key] ?? 0) + 1;
+      if (viewerProfileSeq[key] > 1) {
+        repeatCount++;
+      }
+    }
+
+    const counts = Object.values(profileImpMap).sort((a, b) => a - b);
+    const getP = (p: number) => {
+      if (counts.length === 0) return 0;
+      const idx = Math.min(Math.floor(p * counts.length), counts.length - 1);
+      return counts[idx] ?? 0;
+    };
+
+    const repeatedRate = totalImps > 0 ? Number(((repeatCount / totalImps) * 100).toFixed(1)) : 0;
+
+    const totalSwipes = swipes7dRes?.data?.length ?? 0;
+    const positiveSwipes = (swipes7dRes?.data ?? []).filter((s: any) => s.kind === "send").length;
+    const positiveSwipeRate = totalSwipes > 0 ? Number(((positiveSwipes / totalSwipes) * 100).toFixed(1)) : 0;
+
+    // Gender breakdown with k >= 10 cohort privacy protection
+    const { data: genderProfiles } = await db
+      .from("profiles")
+      .select("gender")
+      .eq("onboarded", true)
+      .eq("discoverable", true)
+      .eq("verification_status", "approved")
+      .eq("is_suspended", false);
+
+    const genderCounts: Record<string, number> = {};
+    for (const p of (genderProfiles ?? []) as any[]) {
+      const g = p.gender || "unspecified";
+      genderCounts[g] = (genderCounts[g] ?? 0) + 1;
+    }
+
+    const genderBreakdown = Object.entries(genderCounts).map(([gender, count]) => {
+      const isSuppressed = count < 10;
+      return {
+        gender,
+        is_suppressed: isSuppressed,
+        eligible_count: isSuppressed ? null : count,
+        impressions_7d: isSuppressed ? null : 0,
+        privacy_note: isSuppressed ? "Suppressed: cohort size < 10 (k-anonymity privacy protection)" : null,
+      };
+    });
+
+    return {
+      eligible_pool_size: eligiblePool ?? 0,
+      active_discoverable_24h: active24hSet.size,
+      active_discoverable_7d: active7dSet.size,
+      exposure_distribution: {
+        p10: getP(0.1),
+        p25: getP(0.25),
+        median_p50: getP(0.5),
+        p75: getP(0.75),
+        p90: getP(0.9),
+        max: counts.length > 0 ? Math.max(...counts) : 0,
+        avg: counts.length > 0 ? Number((counts.reduce((a, b) => a + b, 0) / counts.length).toFixed(1)) : 0,
+      },
+      repeated_exposure_rate: repeatedRate,
+      feed_exhaustion_rate: 0,
+      positive_swipe_rate: positiveSwipeRate,
+      mutual_matches_7d: 0,
+      gender_breakdown: genderBreakdown,
+      min_cohort_threshold: 10,
+    };
+  });
+

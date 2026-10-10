@@ -114,21 +114,70 @@ export function ageFrom(birth: string): number {
   return check.age;
 }
 
-const urlCache = new Map<string, string>();
-/** Private photos → short-lived signed URLs. */
+interface CachedPhotoUrl {
+  url: string;
+  expiresAt: number;
+}
+
+const urlCache = new Map<string, CachedPhotoUrl>();
+
+/** Invalidate cached signed URL when photo changes, is removed, or fails */
+export function invalidatePhotoUrl(path: string | null | undefined) {
+  if (path) urlCache.delete(path);
+}
+
+/**
+ * Resolves private photos into short-lived signed URLs.
+ * Automatically refreshes URLs that are expired or expiring within 2 minutes.
+ * Does not log or leak signed URLs.
+ */
 export function usePhotoUrls(paths: (string | null | undefined)[]) {
   const key = paths.filter(Boolean).join("|");
   const [urls, setUrls] = useState<Record<string, string>>({});
+
   useEffect(() => {
-    const need = paths.filter((p): p is string => !!p && !urlCache.has(p));
-    const done = () => setUrls(Object.fromEntries(paths.filter((p): p is string => !!p && urlCache.has(p)).map((p) => [p, urlCache.get(p)!])));
-    if (!need.length) return done();
-    supabase.storage.from("photos").createSignedUrls(need, 3600).then(({ data }) => {
-      data?.forEach((d) => d.path && d.signedUrl && urlCache.set(d.path, d.signedUrl));
-      done();
+    const now = Date.now();
+    // Re-sign if not cached or if expiring within 2 minutes (120,000 ms)
+    const need = paths.filter((p): p is string => {
+      if (!p) return false;
+      const cached = urlCache.get(p);
+      return !cached || cached.expiresAt <= now + 120_000;
     });
+
+    const updateState = () => {
+      const activeEntries = paths
+        .filter((p): p is string => !!p && urlCache.has(p))
+        .map((p) => [p, urlCache.get(p)!.url] as const);
+      setUrls(Object.fromEntries(activeEntries));
+    };
+
+    if (!need.length) {
+      updateState();
+      return;
+    }
+
+    // 1800s (30m) safe short-lived expiration
+    const expiresInSeconds = 1800;
+    supabase.storage
+      .from("photos")
+      .createSignedUrls(need, expiresInSeconds)
+      .then(({ data, error }) => {
+        if (!error && data) {
+          const expiresAt = Date.now() + expiresInSeconds * 1000;
+          data.forEach((d) => {
+            if (d.path && d.signedUrl) {
+              urlCache.set(d.path, { url: d.signedUrl, expiresAt });
+            }
+          });
+        }
+        updateState();
+      })
+      .catch(() => {
+        updateState();
+      });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key]);
+
   return urls;
 }
 

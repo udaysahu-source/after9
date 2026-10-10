@@ -24,6 +24,14 @@ import {
   Rocket,
   Globe,
   KeyRound,
+  Copy,
+  Check,
+  ExternalLink,
+  Filter,
+  UserCheck,
+  UserX,
+  ChevronRight,
+  Shield,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import {
@@ -37,17 +45,23 @@ import {
   resolveAdminReport,
   listAdminInvites,
   revokeAdminInvite,
+  createAdminInvite,
   listAdminEvents,
   saveAdminEvent,
   verifyAdminEvent,
+  deleteAdminEvent,
   listAdminEventSuggestions,
   resolveAdminEventSuggestion,
   getAdminSystemHealth,
   getAdminAuditLogs,
   getAdminSecurityOverview,
+  getAdminDiscoveryBalanceMetrics,
   type AdminStatusResult,
+  type DiscoveryBalanceMetricsResult,
 } from "@/lib/admin.functions";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { usePhotoUrls } from "@/lib/after9";
+import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/admin")({
   head: () => ({
@@ -59,7 +73,7 @@ export const Route = createFileRoute("/admin")({
   component: AdminDashboard,
 });
 
-type AdminTab = "overview" | "launch" | "users" | "moderation" | "invites" | "events" | "health" | "security";
+type AdminTab = "overview" | "launch" | "balance" | "users" | "moderation" | "invites" | "events" | "health" | "security";
 
 function AdminDashboard() {
   const checkStatus = useServerFn(checkAdminStatus);
@@ -72,14 +86,17 @@ function AdminDashboard() {
   const resolveReport = useServerFn(resolveAdminReport);
   const getInvites = useServerFn(listAdminInvites);
   const revokeInvite = useServerFn(revokeAdminInvite);
+  const createInvite = useServerFn(createAdminInvite);
   const getEvents = useServerFn(listAdminEvents);
   const saveEvent = useServerFn(saveAdminEvent);
   const verifyEvent = useServerFn(verifyAdminEvent);
+  const deleteEvent = useServerFn(deleteAdminEvent);
   const getEventSuggestions = useServerFn(listAdminEventSuggestions);
   const resolveSuggestion = useServerFn(resolveAdminEventSuggestion);
   const getHealth = useServerFn(getAdminSystemHealth);
   const getAuditLogs = useServerFn(getAdminAuditLogs);
   const getSecurityOverview = useServerFn(getAdminSecurityOverview);
+  const getBalanceMetrics = useServerFn(getAdminDiscoveryBalanceMetrics);
 
   const [authStatus, setAuthStatus] = useState<AdminStatusResult | null>(null);
   const [loadingAuth, setLoadingAuth] = useState(true);
@@ -90,6 +107,10 @@ function AdminDashboard() {
   // State for metrics
   const [metrics, setMetrics] = useState<any>(null);
   const [metricsLoading, setMetricsLoading] = useState(false);
+
+  // State for Discovery Balance & Fairness
+  const [balanceData, setBalanceData] = useState<DiscoveryBalanceMetricsResult | null>(null);
+  const [balanceLoading, setBalanceLoading] = useState(false);
   const [growthWindow, setGrowthWindow] = useState<"24h" | "7d" | "30d" | "all">("24h");
 
   // State for Launch Control
@@ -104,6 +125,10 @@ function AdminDashboard() {
   const [userFilter, setUserFilter] = useState("all");
   const [usersLoading, setUsersLoading] = useState(false);
   const [selectedUser, setSelectedUser] = useState<any>(null);
+  const [inspectUser, setInspectUser] = useState<any | null>(null);
+  const adminPhotoUrls = usePhotoUrls(
+    [...userList.map((u) => u.photo_path), inspectUser?.photo_path].filter(Boolean)
+  );
   const [actionReason, setActionReason] = useState("");
   const [confirmModal, setConfirmModal] = useState<{ action: "suspend" | "reactivate" | "approve" | "reject"; user: any } | null>(null);
 
@@ -112,10 +137,16 @@ function AdminDashboard() {
   const [reportsLoading, setReportsLoading] = useState(false);
   const [modNote, setModNote] = useState("");
   const [selectedReport, setSelectedReport] = useState<any>(null);
+  const [resolveReportModal, setResolveReportModal] = useState<{ report: any; status: "resolved" | "dismissed" } | null>(null);
 
   // State for invites
   const [invites, setInvites] = useState<any[]>([]);
   const [invitesLoading, setInvitesLoading] = useState(false);
+  const [createInviteModal, setCreateInviteModal] = useState(false);
+  const [customInviteCode, setCustomInviteCode] = useState("");
+  const [creatingInvite, setCreatingInvite] = useState(false);
+  const [inviteSearch, setInviteSearch] = useState("");
+  const [copiedCode, setCopiedCode] = useState<string | null>(null);
 
   // State for events
   const [events, setEvents] = useState<any[]>([]);
@@ -123,6 +154,7 @@ function AdminDashboard() {
   const [eventSubTab, setEventSubTab] = useState<"listings" | "suggestions">("listings");
   const [eventSuggestions, setEventSuggestions] = useState<any[]>([]);
   const [eventModalOpen, setEventModalOpen] = useState(false);
+  const [deleteEventModal, setDeleteEventModal] = useState<any | null>(null);
   const [editingEvent, setEditingEvent] = useState<any>({
     title: "",
     slug: "",
@@ -295,6 +327,16 @@ function AdminDashboard() {
       } finally {
         setLaunchLoading(false);
       }
+    } else if (activeTab === "balance") {
+      setBalanceLoading(true);
+      try {
+        const bd = await getBalanceMetrics();
+        setBalanceData(bd);
+      } catch (err: any) {
+        toast.error(err.message || "Could not load balance analytics");
+      } finally {
+        setBalanceLoading(false);
+      }
     } else if (activeTab === "users") {
       setUsersLoading(true);
       try {
@@ -372,8 +414,10 @@ function AdminDashboard() {
     getReports,
     getInvites,
     getEvents,
+    getEventSuggestions,
     getHealth,
     getAuditLogs,
+    getSecurityOverview,
   ]);
 
   useEffect(() => {
@@ -598,24 +642,63 @@ function AdminDashboard() {
   };
 
   // Handle Report Resolution
-  const handleResolveReport = async (status: "resolved" | "dismissed") => {
-    if (!selectedReport) return;
+  const handleResolveReport = async (report: any, status: "resolved" | "dismissed", notes?: string) => {
     try {
       await resolveReport({
         data: {
-          blockerId: selectedReport.blocker_id,
-          blockedId: selectedReport.blocked_id,
+          blockerId: report.blocker_id,
+          blockedId: report.blocked_id,
           status,
-          notes: modNote || undefined,
+          notes: notes || modNote || undefined,
         },
       });
       toast.success(`Report marked as ${status}`);
       setSelectedReport(null);
+      setResolveReportModal(null);
       setModNote("");
       loadTabData();
     } catch (err: any) {
       toast.error(err.message || "Failed to resolve report");
     }
+  };
+
+  // Handle Delete Event
+  const handleDeleteEvent = async (eventId: string) => {
+    try {
+      await deleteEvent({ data: { eventId } });
+      toast.success("Event listing deleted");
+      setDeleteEventModal(null);
+      setEventModalOpen(false);
+      loadTabData();
+    } catch (err: any) {
+      toast.error(err.message || "Failed to delete event");
+    }
+  };
+
+  // Handle Create Admin VIP Invite
+  const handleCreateInvite = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setCreatingInvite(true);
+    try {
+      const res = await createInvite({ data: { code: customInviteCode || undefined } });
+      toast.success(`Created invitation token: ${res.code}`);
+      setCreateInviteModal(false);
+      setCustomInviteCode("");
+      loadTabData();
+    } catch (err: any) {
+      toast.error(err.message || "Failed to create invite token");
+    } finally {
+      setCreatingInvite(false);
+    }
+  };
+
+  // Handle Copy Invite Link
+  const handleCopyInviteLink = (code: string) => {
+    const url = `${window.location.origin}/invites?code=${code}`;
+    navigator.clipboard.writeText(url);
+    setCopiedCode(code);
+    toast.success(`Copied invite link: ${url}`);
+    setTimeout(() => setCopiedCode(null), 2500);
   };
 
   // Handle Invite Revocation
@@ -649,7 +732,7 @@ function AdminDashboard() {
       <header className="sticky top-0 z-40 border-b border-border/80 bg-background/95 backdrop-blur-md px-4 py-3">
         <div className="mx-auto flex max-w-7xl items-center justify-between">
           <div className="flex items-center gap-3">
-            <Link to="/discover" className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-primary">
+            <Link to="/discover" className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-primary transition">
               <ArrowLeft className="h-3.5 w-3.5" />
               <span>App</span>
             </Link>
@@ -660,12 +743,33 @@ function AdminDashboard() {
               </span>
               <h1 className="font-display text-lg font-extrabold text-primary">After9 Control Center</h1>
             </div>
+            {/* Quick Live Navigation Links */}
+            <div className="hidden lg:flex items-center gap-1.5 ml-3 pl-3 border-l border-border/60 text-xs">
+              <Link
+                to="/discover"
+                className="px-2.5 py-1 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/70 transition font-medium"
+              >
+                Feed ↗
+              </Link>
+              <Link
+                to="/plan"
+                className="px-2.5 py-1 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/70 transition font-medium"
+              >
+                Events ↗
+              </Link>
+              <Link
+                to="/profile"
+                className="px-2.5 py-1 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/70 transition font-medium"
+              >
+                Profile ↗
+              </Link>
+            </div>
           </div>
 
           <div className="flex items-center gap-2 sm:gap-3">
             {authStatus.serviceRoleConfigured === false && (
               <span
-                className="hidden lg:inline-flex rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-0.5 text-[11px] font-semibold text-amber-600 dark:text-amber-400"
+                className="hidden xl:inline-flex rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-0.5 text-[11px] font-semibold text-amber-600 dark:text-amber-400"
                 title="Service role key not configured in .env. Admin operations are enforced via verified PostgreSQL RLS policies."
               >
                 Direct RLS Mode
@@ -696,11 +800,26 @@ function AdminDashboard() {
         <div className="mx-auto max-w-7xl mt-3 flex items-center gap-1 overflow-x-auto pb-1 scrollbar-none">
           {[
             { id: "overview", label: "Overview", icon: Activity },
-            { id: "launch", label: "Launch Control", icon: Sparkles },
-            { id: "users", label: "Users", icon: Users },
-            { id: "moderation", label: "Moderation & Safety", icon: ShieldAlert },
+            {
+              id: "launch",
+              label: "Launch Control",
+              icon: Sparkles,
+              badge: launchControl ? (launchControl.discover_enabled ? "LIVE" : "PAUSED") : undefined,
+            },
+            {
+              id: "balance",
+              label: "Discovery Balance",
+              icon: Activity,
+            },
+            { id: "users", label: "Users", icon: Users, count: metrics?.totalUsers },
+            {
+              id: "moderation",
+              label: "Moderation & Safety",
+              icon: ShieldAlert,
+              alert: metrics?.openReports > 0 ? metrics.openReports : undefined,
+            },
             { id: "invites", label: "Referrals & Invites", icon: Ticket },
-            { id: "events", label: "Events & Plans", icon: Calendar },
+            { id: "events", label: "Events & Plans", icon: Calendar, count: events?.length },
             { id: "health", label: "System Health & Audit", icon: ShieldCheck },
             { id: "security", label: "Security & Threat Defense", icon: Lock },
           ].map((tab) => {
@@ -718,6 +837,25 @@ function AdminDashboard() {
               >
                 <Icon className="h-3.5 w-3.5" />
                 <span>{tab.label}</span>
+                {tab.alert !== undefined && (
+                  <span className="rounded-full bg-destructive px-1.5 py-0.2 text-[9px] font-black text-destructive-foreground">
+                    {tab.alert}
+                  </span>
+                )}
+                {tab.badge && (
+                  <span
+                    className={`rounded-full px-1.5 py-0.2 text-[9px] font-black ${
+                      tab.badge === "LIVE"
+                        ? "bg-teal-500/20 text-teal-600 dark:text-teal-400"
+                        : "bg-amber-500/20 text-amber-600 dark:text-amber-400"
+                    }`}
+                  >
+                    {tab.badge}
+                  </span>
+                )}
+                {tab.count !== undefined && !tab.alert && !tab.badge && (
+                  <span className="text-[10px] opacity-70 font-mono">({tab.count})</span>
+                )}
               </button>
             );
           })}
@@ -823,7 +961,12 @@ function AdminDashboard() {
               {metrics && (
                 <>
                   <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-                    <MetricCard title="Total Registered" value={metrics.totalUsers} subtitle="All created accounts" />
+                    <MetricCard
+                      title="Total Registered"
+                      value={metrics.totalUsers}
+                      subtitle="All created accounts"
+                      onClick={() => setActiveTab("users")}
+                    />
                     <MetricCard
                       title={`New Users (${growthWindow.toUpperCase()})`}
                       value={
@@ -837,6 +980,7 @@ function AdminDashboard() {
                       }
                       subtitle={`Registrations in past ${growthWindow}`}
                       highlight={true}
+                      onClick={() => setActiveTab("users")}
                     />
                     <MetricCard
                       title="Profile Completed"
@@ -844,11 +988,16 @@ function AdminDashboard() {
                       subtitle={`${
                         metrics.totalUsers ? Math.round((metrics.onboardedUsers / metrics.totalUsers) * 100) : 0
                       }% completion rate`}
+                      onClick={() => {
+                        setUserFilter("onboarded");
+                        setActiveTab("users");
+                      }}
                     />
                     <MetricCard
                       title="Live Discover Inventory"
                       value={metrics.discoverableUsers}
                       subtitle="Eligible & discoverable now"
+                      onClick={() => setActiveTab("launch")}
                     />
                     <MetricCard title="Mutual Matches" value={metrics.mutualMatches} subtitle="Two-way Dandiya clashes" />
                     <MetricCard title="Total Swipes" value={metrics.totalSwipes} subtitle="Send & pass reactions" />
@@ -858,18 +1007,31 @@ function AdminDashboard() {
                       value={metrics.openReports}
                       subtitle="Requires moderator review"
                       highlight={metrics.openReports > 0}
+                      onClick={() => setActiveTab("moderation")}
                     />
-                    <MetricCard title="Active Users (24h)" value={metrics.activeUsers24h} subtitle="Updated profile past 24h" />
-                    <MetricCard title="Active Users (7d)" value={metrics.activeUsers7d} subtitle="Updated profile past 7d" />
+                    <MetricCard
+                      title="Active Users (24h)"
+                      value={metrics.activeUsers24h}
+                      subtitle="Updated profile past 24h"
+                      onClick={() => setActiveTab("users")}
+                    />
+                    <MetricCard
+                      title="Active Users (7d)"
+                      value={metrics.activeUsers7d}
+                      subtitle="Updated profile past 7d"
+                      onClick={() => setActiveTab("users")}
+                    />
                     <MetricCard
                       title="Referral Tokens"
                       value={metrics.totalInvites}
                       subtitle={`${metrics.conversionRate}% claimed rate`}
+                      onClick={() => setActiveTab("invites")}
                     />
                     <MetricCard
                       title="Referred Users"
                       value={metrics.referredUsersTotal ?? metrics.claimedInvites}
                       subtitle={`${metrics.referredOnboardedRate ?? 100}% finished onboarding`}
+                      onClick={() => setActiveTab("invites")}
                     />
                   </div>
 
@@ -1156,6 +1318,308 @@ function AdminDashboard() {
             </div>
           )}
 
+          {/* TAB: DISCOVERY BALANCE & FAIRNESS */}
+          {activeTab === "balance" && (
+            <div className="space-y-6 animate-fade-in">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                  <h2 className="font-display text-2xl font-black text-primary">Discovery Balance & Exposure Fairness</h2>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Real-time operational distribution metrics and exposure balancing audit
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  disabled={balanceLoading}
+                  onClick={async () => {
+                    setBalanceLoading(true);
+                    try {
+                      const bd = await getBalanceMetrics();
+                      setBalanceData(bd);
+                      toast.success("Balance telemetry refreshed");
+                    } catch (err: any) {
+                      toast.error(err.message || "Failed to refresh balance telemetry");
+                    } finally {
+                      setBalanceLoading(false);
+                    }
+                  }}
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-card px-3.5 py-2 text-xs font-bold text-foreground shadow-xs hover:bg-muted active:scale-95 transition"
+                >
+                  <RefreshCw className={cn("h-3.5 w-3.5", balanceLoading && "animate-spin")} />
+                  <span>Refresh Telemetry</span>
+                </button>
+              </div>
+
+              {/* Status & Safety Banner */}
+              <div className="rounded-2xl border border-teal/40 bg-teal/10 p-4 shadow-xs">
+                <div className="flex items-start gap-3">
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-teal text-white shadow-xs">
+                    <ShieldCheck className="h-5 w-5" />
+                  </div>
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-xs font-black text-foreground">Adaptive Exposure Balancing Active</span>
+                      <span className="rounded-full bg-teal/20 px-2 py-0.5 text-[10px] font-extrabold text-teal">
+                        Server-Side Enforced
+                      </span>
+                      <span className="rounded-full bg-background/80 px-2 py-0.5 text-[10px] font-bold text-muted-foreground border border-border/60">
+                        k ≥ {balanceData?.min_cohort_threshold ?? 10} Privacy Guard
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-muted-foreground leading-relaxed">
+                      Candidates are ranked adaptively: under-exposed profiles receive a gentle visibility boost, viewer fatigue penalties prevent over-showing the same candidate across sessions without swiping, and daily deterministic hashing prevents creation-date monopolies. Demographic privacy is strictly protected with small-cohort suppression.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {balanceLoading ? (
+                <div className="flex min-h-[300px] items-center justify-center rounded-2xl border border-border/60 bg-card p-12 text-center">
+                  <RefreshCw className="h-8 w-8 animate-spin text-primary" />
+                </div>
+              ) : (
+                <>
+                  {/* Primary Telemetry Cards Grid */}
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    <div className="rounded-2xl border border-border/80 bg-card p-4 shadow-xs">
+                      <div className="flex items-center justify-between text-muted-foreground">
+                        <span className="text-xs font-bold">Eligible Discovery Pool</span>
+                        <Users className="h-4 w-4" />
+                      </div>
+                      <p className="text-2xl font-black text-foreground mt-2">
+                        {balanceData?.eligible_pool_size ?? 0}
+                      </p>
+                      <p className="text-[10px] text-muted-foreground mt-1">
+                        Approved, onboarded & discoverable
+                      </p>
+                    </div>
+
+                    <div className="rounded-2xl border border-border/80 bg-card p-4 shadow-xs">
+                      <div className="flex items-center justify-between text-muted-foreground">
+                        <span className="text-xs font-bold">Active in Windows</span>
+                        <Activity className="h-4 w-4" />
+                      </div>
+                      <p className="text-2xl font-black text-teal mt-2">
+                        {balanceData?.active_discoverable_24h ?? 0}{" "}
+                        <span className="text-xs font-semibold text-muted-foreground">/ {balanceData?.active_discoverable_7d ?? 0}</span>
+                      </p>
+                      <p className="text-[10px] text-muted-foreground mt-1">
+                        Profiles served in 24h / 7d
+                      </p>
+                    </div>
+
+                    <div className="rounded-2xl border border-border/80 bg-card p-4 shadow-xs">
+                      <div className="flex items-center justify-between text-muted-foreground">
+                        <span className="text-xs font-bold">Repeated-Exposure Rate</span>
+                        <RefreshCw className="h-4 w-4" />
+                      </div>
+                      <p className="text-2xl font-black text-primary mt-2">
+                        {balanceData?.repeated_exposure_rate ?? 0}%
+                      </p>
+                      <p className="text-[10px] text-muted-foreground mt-1">
+                        Repeat impressions to same viewer
+                      </p>
+                    </div>
+
+                    <div className="rounded-2xl border border-border/80 bg-card p-4 shadow-xs">
+                      <div className="flex items-center justify-between text-muted-foreground">
+                        <span className="text-xs font-bold">Feed Exhaustion Rate</span>
+                        <CheckCircle2 className="h-4 w-4" />
+                      </div>
+                      <p className="text-2xl font-black text-amber-600 mt-2">
+                        {balanceData?.feed_exhaustion_rate ?? 0}%
+                      </p>
+                      <p className="text-[10px] text-muted-foreground mt-1">
+                        Active viewers at end of deck
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Secondary Metrics: Positive Swipes & Mutual Matches */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="rounded-2xl border border-border/80 bg-card p-4 shadow-xs flex items-center justify-between">
+                      <div>
+                        <span className="text-xs font-bold text-muted-foreground">Positive Swipe Rate (7d)</span>
+                        <p className="text-xl font-black text-foreground mt-1">
+                          {balanceData?.positive_swipe_rate ?? 0}%
+                        </p>
+                        <p className="text-[11px] text-muted-foreground">
+                          Proportion of Dandiya sends vs passes
+                        </p>
+                      </div>
+                      <div className="h-10 w-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center font-bold">
+                        💃
+                      </div>
+                    </div>
+
+                    <div className="rounded-2xl border border-border/80 bg-card p-4 shadow-xs flex items-center justify-between">
+                      <div>
+                        <span className="text-xs font-bold text-muted-foreground">Mutual Matches Created (7d)</span>
+                        <p className="text-xl font-black text-teal mt-1">
+                          {balanceData?.mutual_matches_7d ?? 0}
+                        </p>
+                        <p className="text-[11px] text-muted-foreground">
+                          Reciprocal Dandiya matches unlocked
+                        </p>
+                      </div>
+                      <div className="h-10 w-10 rounded-xl bg-teal/10 text-teal flex items-center justify-center font-bold">
+                        ✨
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Exposure Distribution Percentiles Card */}
+                  <div className="rounded-2xl border border-border/80 bg-card p-5 shadow-xs space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h3 className="text-sm font-extrabold text-foreground">7-Day Profile Exposure Distribution</h3>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          Distribution of platform impressions across all eligible, discoverable profiles
+                        </p>
+                      </div>
+                      <span className="rounded-lg bg-muted px-2.5 py-1 text-[11px] font-bold text-muted-foreground">
+                        Avg: {balanceData?.exposure_distribution?.avg ?? 0} imps
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 text-center">
+                      <div className="rounded-xl border border-border/60 bg-background p-3">
+                        <span className="text-[10px] font-bold text-muted-foreground uppercase">p10</span>
+                        <p className="text-lg font-black text-foreground mt-0.5">
+                          {balanceData?.exposure_distribution?.p10 ?? 0}
+                        </p>
+                        <span className="text-[9px] text-muted-foreground">Under-served</span>
+                      </div>
+                      <div className="rounded-xl border border-border/60 bg-background p-3">
+                        <span className="text-[10px] font-bold text-muted-foreground uppercase">p25</span>
+                        <p className="text-lg font-black text-foreground mt-0.5">
+                          {balanceData?.exposure_distribution?.p25 ?? 0}
+                        </p>
+                        <span className="text-[9px] text-muted-foreground">Lower quartile</span>
+                      </div>
+                      <div className="rounded-xl border border-teal/40 bg-teal/5 p-3">
+                        <span className="text-[10px] font-bold text-teal uppercase">p50 (Median)</span>
+                        <p className="text-lg font-black text-teal mt-0.5">
+                          {balanceData?.exposure_distribution?.median_p50 ?? 0}
+                        </p>
+                        <span className="text-[9px] text-teal">Typical reach</span>
+                      </div>
+                      <div className="rounded-xl border border-border/60 bg-background p-3">
+                        <span className="text-[10px] font-bold text-muted-foreground uppercase">p75</span>
+                        <p className="text-lg font-black text-foreground mt-0.5">
+                          {balanceData?.exposure_distribution?.p75 ?? 0}
+                        </p>
+                        <span className="text-[9px] text-muted-foreground">Upper quartile</span>
+                      </div>
+                      <div className="rounded-xl border border-border/60 bg-background p-3">
+                        <span className="text-[10px] font-bold text-muted-foreground uppercase">p90</span>
+                        <p className="text-lg font-black text-foreground mt-0.5">
+                          {balanceData?.exposure_distribution?.p90 ?? 0}
+                        </p>
+                        <span className="text-[9px] text-muted-foreground">High visibility</span>
+                      </div>
+                      <div className="rounded-xl border border-primary/40 bg-primary/5 p-3">
+                        <span className="text-[10px] font-bold text-primary uppercase">Max</span>
+                        <p className="text-lg font-black text-primary mt-0.5">
+                          {balanceData?.exposure_distribution?.max ?? 0}
+                        </p>
+                        <span className="text-[9px] text-primary">Peak profile</span>
+                      </div>
+                    </div>
+
+                    <div className="rounded-xl border border-border/40 bg-muted/20 p-3 text-xs text-muted-foreground">
+                      <p>
+                        💡 <b>Balancing mechanism:</b> The adaptive system adds a dynamic boost up to +15 score points for profiles with impression counts below the platform median, ensuring equal opportunity to be discovered without dampening genuine user preference or compatibility signals.
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Demographic Distribution & Privacy Safeguard Card */}
+                  <div className="rounded-2xl border border-border/80 bg-card p-5 shadow-xs space-y-4">
+                    <div className="flex items-center justify-between flex-wrap gap-2">
+                      <div>
+                        <h3 className="text-sm font-extrabold text-foreground">Self-Described Gender Distribution & Privacy Protection</h3>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          Aggregated for operational balancing checks only — never exposed publicly or to users
+                        </p>
+                      </div>
+                      <div className="inline-flex items-center gap-1 rounded-full border border-amber-500/40 bg-amber-500/10 px-2.5 py-0.5 text-[10px] font-bold text-amber-700 dark:text-amber-300">
+                        <span>🛡️</span>
+                        <span>k-Anonymity (k ≥ 10) Enforced</span>
+                      </div>
+                    </div>
+
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left text-xs">
+                        <thead>
+                          <tr className="border-b border-border/60 text-muted-foreground">
+                            <th className="pb-2 font-bold">Self-Reported Gender</th>
+                            <th className="pb-2 font-bold">Eligible Discovery Pool</th>
+                            <th className="pb-2 font-bold">7-Day Impressions</th>
+                            <th className="pb-2 font-bold">Privacy Status</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-border/40">
+                          {(balanceData?.gender_breakdown ?? []).length === 0 ? (
+                            <tr>
+                              <td colSpan={4} className="py-4 text-center text-muted-foreground">
+                                No demographic telemetry available yet.
+                              </td>
+                            </tr>
+                          ) : (
+                            (balanceData?.gender_breakdown ?? []).map((row) => (
+                              <tr key={row.gender} className="hover:bg-muted/30">
+                                <td className="py-2.5 font-bold capitalize text-foreground">
+                                  {row.gender}
+                                </td>
+                                <td className="py-2.5 text-foreground">
+                                  {row.is_suppressed ? (
+                                    <span className="font-mono text-muted-foreground">{"< 10"}</span>
+                                  ) : (
+                                    <span className="font-extrabold">{row.eligible_count}</span>
+                                  )}
+                                </td>
+                                <td className="py-2.5 text-foreground">
+                                  {row.is_suppressed ? (
+                                    <span className="font-mono text-muted-foreground">—</span>
+                                  ) : (
+                                    <span>{row.impressions_7d}</span>
+                                  )}
+                                </td>
+                                <td className="py-2.5">
+                                  {row.is_suppressed ? (
+                                    <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-bold text-amber-800 dark:text-amber-200">
+                                      <span>🔒</span>
+                                      <span>Suppressed (cohort &lt; 10)</span>
+                                    </span>
+                                  ) : (
+                                    <span className="inline-flex items-center gap-1 rounded-full bg-teal/15 px-2 py-0.5 text-[10px] font-bold text-teal">
+                                      <span>✓</span>
+                                      <span>Sufficient cohort (k ≥ 10)</span>
+                                    </span>
+                                  )}
+                                </td>
+                              </tr>
+                            ))
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    <div className="rounded-xl border border-border/40 bg-muted/20 p-3 text-[11px] text-muted-foreground space-y-1">
+                      <p>
+                        <b>Confidentiality Policy:</b> After9 never publishes gender ratios, "High Demand" badges, or invented popularity stats. Demographic numbers are reserved exclusively for administrators to verify that algorithms remain fair, unbiased, and protective of all community members.
+                      </p>
+                      <p className="text-[10px] text-muted-foreground/80">
+                        * Note: Minimum cohort threshold (k=10) suppresses small groups to prevent individual re-identification.
+                      </p>
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+
           {/* TAB 2: USERS */}
           {activeTab === "users" && (
             <div className="space-y-4">
@@ -1182,9 +1646,12 @@ function AdminDashboard() {
                     className="rounded-xl border border-border bg-card px-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-action"
                   >
                     <option value="all">All statuses</option>
-                    <option value="approved">Approved</option>
-                    <option value="pending">Pending</option>
-                    <option value="suspended">Suspended</option>
+                    <option value="approved">Approved / Verified</option>
+                    <option value="pending">Pending Verification</option>
+                    <option value="rejected">Rejected Verification</option>
+                    <option value="suspended">Suspended Accounts</option>
+                    <option value="onboarded">Completed Onboarding</option>
+                    <option value="not_onboarded">Incomplete Profile</option>
                   </select>
                 </div>
               </div>
@@ -1208,9 +1675,9 @@ function AdminDashboard() {
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-2.5">
                             <div className="h-8 w-8 rounded-full bg-muted overflow-hidden shrink-0">
-                              {u.photo_path ? (
+                              {u.photo_path && adminPhotoUrls[u.photo_path] ? (
                                 <img
-                                  src={`https://vjsqakziqyesruxggaik.supabase.co/storage/v1/object/public/photos/${u.photo_path}`}
+                                  src={adminPhotoUrls[u.photo_path]}
                                   alt=""
                                   className="h-full w-full object-cover"
                                   onError={(e) => {
@@ -1242,6 +1709,10 @@ function AdminDashboard() {
                             <span className="rounded-full bg-teal-500/15 px-2 py-0.5 text-[10px] font-bold text-teal-600 dark:text-teal-400">
                               Verified
                             </span>
+                          ) : u.verification_status === "rejected" ? (
+                            <span className="rounded-full bg-destructive/15 px-2 py-0.5 text-[10px] font-bold text-destructive">
+                              Rejected
+                            </span>
                           ) : (
                             <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-bold text-amber-600 dark:text-amber-400">
                               Pending
@@ -1260,17 +1731,25 @@ function AdminDashboard() {
                         </td>
                         <td className="px-4 py-3 text-right">
                           <div className="flex items-center justify-end gap-1.5">
+                            <button
+                              onClick={() => setInspectUser(u)}
+                              className="inline-flex items-center gap-1 rounded-lg border border-border bg-card px-2 py-1 text-[11px] font-bold text-foreground hover:bg-muted shadow-2xs transition"
+                              title="Inspect full profile, nights, and quiz"
+                            >
+                              <Eye className="h-3 w-3 text-action" />
+                              <span>Inspect</span>
+                            </button>
                             {u.is_suspended ? (
                               <button
                                 onClick={() => setConfirmModal({ action: "reactivate", user: u })}
-                                className="rounded-lg border border-teal-500/40 bg-teal-500/10 px-2.5 py-1 text-[11px] font-bold text-teal-600 hover:bg-teal-500/20"
+                                className="rounded-lg border border-teal-500/40 bg-teal-500/10 px-2 py-1 text-[11px] font-bold text-teal-600 hover:bg-teal-500/20"
                               >
                                 Reactivate
                               </button>
                             ) : (
                               <button
                                 onClick={() => setConfirmModal({ action: "suspend", user: u })}
-                                className="rounded-lg border border-destructive/40 bg-destructive/10 px-2.5 py-1 text-[11px] font-bold text-destructive hover:bg-destructive/20"
+                                className="rounded-lg border border-destructive/40 bg-destructive/10 px-2 py-1 text-[11px] font-bold text-destructive hover:bg-destructive/20"
                               >
                                 Suspend
                               </button>
@@ -1278,9 +1757,17 @@ function AdminDashboard() {
                             {u.verification_status !== "approved" && (
                               <button
                                 onClick={() => setConfirmModal({ action: "approve", user: u })}
-                                className="rounded-lg border border-border bg-muted/60 px-2.5 py-1 text-[11px] font-bold text-foreground hover:bg-muted"
+                                className="rounded-lg border border-teal-500/40 bg-teal-500/10 px-2 py-1 text-[11px] font-bold text-teal-600 hover:bg-teal-500/20"
                               >
                                 Approve
+                              </button>
+                            )}
+                            {u.verification_status !== "rejected" && u.verification_status !== "approved" && (
+                              <button
+                                onClick={() => setConfirmModal({ action: "reject", user: u })}
+                                className="rounded-lg border border-border bg-muted/60 px-2 py-1 text-[11px] font-bold text-muted-foreground hover:bg-muted"
+                              >
+                                Reject
                               </button>
                             )}
                           </div>
@@ -1341,23 +1828,38 @@ function AdminDashboard() {
                         </p>
                       </div>
 
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
+                        {rep.blocked && (
+                          <button
+                            type="button"
+                            onClick={() => setInspectUser(rep.blocked)}
+                            className="inline-flex items-center gap-1 rounded-lg border border-border bg-card px-2.5 py-1.5 text-xs font-bold text-foreground hover:bg-muted transition"
+                          >
+                            <Eye className="h-3.5 w-3.5 text-action" />
+                            Inspect Target
+                          </button>
+                        )}
+                        {rep.blocked && !rep.blocked.is_suspended && (
+                          <button
+                            type="button"
+                            onClick={() => setConfirmModal({ action: "suspend", user: rep.blocked })}
+                            className="rounded-lg border border-destructive/40 bg-destructive/10 px-2.5 py-1.5 text-xs font-bold text-destructive hover:bg-destructive/20 transition"
+                          >
+                            Suspend Target
+                          </button>
+                        )}
                         {rep.status === "pending" && (
                           <>
                             <button
-                              onClick={() => {
-                                setSelectedReport(rep);
-                                handleResolveReport("resolved");
-                              }}
+                              type="button"
+                              onClick={() => setResolveReportModal({ report: rep, status: "resolved" })}
                               className="rounded-lg bg-teal-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-teal-700 transition"
                             >
-                              Resolve
+                              Resolve Report
                             </button>
                             <button
-                              onClick={() => {
-                                setSelectedReport(rep);
-                                handleResolveReport("dismissed");
-                              }}
+                              type="button"
+                              onClick={() => setResolveReportModal({ report: rep, status: "dismissed" })}
                               className="rounded-lg border border-border bg-card px-3 py-1.5 text-xs font-bold text-muted-foreground hover:bg-muted transition"
                             >
                               Dismiss
@@ -1403,7 +1905,26 @@ function AdminDashboard() {
                     Four-stage tracking: link creation → registration attribution → onboarding completion → live on Discover.
                   </p>
                 </div>
-                {invitesLoading && <RefreshCw className="h-4 w-4 animate-spin text-action" />}
+                <div className="flex items-center gap-2">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
+                    <input
+                      type="text"
+                      placeholder="Search code, inviter…"
+                      value={inviteSearch}
+                      onChange={(e) => setInviteSearch(e.target.value)}
+                      className="rounded-xl border border-border bg-card pl-8 pr-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-action"
+                    />
+                  </div>
+                  <button
+                    onClick={() => setCreateInviteModal(true)}
+                    className="inline-flex items-center gap-1.5 rounded-xl bg-action px-3 py-1.5 text-xs font-bold text-action-foreground shadow-xs hover:opacity-90 transition"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    Generate VIP Invite
+                  </button>
+                  {invitesLoading && <RefreshCw className="h-4 w-4 animate-spin text-action" />}
+                </div>
               </div>
 
               {/* Referral Funnel Aggregate Cards */}
@@ -1447,65 +1968,96 @@ function AdminDashboard() {
                       <th className="px-4 py-3">Attributed User</th>
                       <th className="px-4 py-3">Funnel Stage</th>
                       <th className="px-4 py-3">Created</th>
-                      <th className="px-4 py-3 text-right">Action</th>
+                      <th className="px-4 py-3 text-right">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border/60">
-                    {invites.map((inv) => (
-                      <tr key={inv.code} className="hover:bg-muted/30 transition">
-                        <td className="px-4 py-3 font-mono font-bold text-primary">{inv.code}</td>
-                        <td className="px-4 py-3">
-                          <p className="font-semibold text-foreground">{inv.creator?.first_name || "Unknown"}</p>
-                          <p className="text-[10px] text-muted-foreground">{inv.creator?.college || ""}</p>
-                        </td>
-                        <td className="px-4 py-3">
-                          {inv.claimed_by_user ? (
-                            <div>
-                              <p className="font-semibold text-foreground">{inv.claimed_by_user.first_name}</p>
-                              <p className="text-[10px] text-muted-foreground">{inv.claimed_by_user.college || "No college"}</p>
+                    {invites
+                      .filter((inv) => {
+                        if (!inviteSearch.trim()) return true;
+                        const q = inviteSearch.toLowerCase();
+                        return (
+                          inv.code?.toLowerCase().includes(q) ||
+                          inv.creator?.first_name?.toLowerCase().includes(q) ||
+                          inv.claimed_by_user?.first_name?.toLowerCase().includes(q)
+                        );
+                      })
+                      .map((inv) => (
+                        <tr key={inv.code} className="hover:bg-muted/30 transition">
+                          <td className="px-4 py-3 font-mono font-bold text-primary">{inv.code}</td>
+                          <td className="px-4 py-3">
+                            <p className="font-semibold text-foreground">{inv.creator?.first_name || "Admin / Platform"}</p>
+                            <p className="text-[10px] text-muted-foreground">{inv.creator?.college || ""}</p>
+                          </td>
+                          <td className="px-4 py-3">
+                            {inv.claimed_by_user ? (
+                              <div>
+                                <p className="font-semibold text-foreground">{inv.claimed_by_user.first_name}</p>
+                                <p className="text-[10px] text-muted-foreground">{inv.claimed_by_user.college || "No college"}</p>
+                              </div>
+                            ) : (
+                              <span className="text-muted-foreground italic">Unclaimed (Available)</span>
+                            )}
+                          </td>
+                          <td className="px-4 py-3">
+                            {inv.revoked ? (
+                              <span className="rounded-full bg-destructive/15 px-2 py-0.5 text-[10px] font-bold text-destructive">
+                                Revoked
+                              </span>
+                            ) : inv.claimed_by_user?.discoverable ? (
+                              <span className="rounded-full bg-teal-500/15 px-2 py-0.5 text-[10px] font-bold text-teal-600 dark:text-teal-400">
+                                Stage 4: Live on Discover
+                              </span>
+                            ) : inv.claimed_by_user?.onboarded ? (
+                              <span className="rounded-full bg-teal-500/15 px-2 py-0.5 text-[10px] font-bold text-teal-600">
+                                Stage 3: Onboarded
+                              </span>
+                            ) : inv.claimed_at ? (
+                              <span className="rounded-full bg-blue-500/15 px-2 py-0.5 text-[10px] font-bold text-blue-600">
+                                Stage 2: Registered
+                              </span>
+                            ) : (
+                              <span className="rounded-full bg-action/15 px-2 py-0.5 text-[10px] font-bold text-action">
+                                Stage 1: Link Created
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-4 py-3 text-muted-foreground">
+                            {new Date(inv.created_at).toLocaleDateString()}
+                          </td>
+                          <td className="px-4 py-3 text-right">
+                            <div className="flex items-center justify-end gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => handleCopyInviteLink(inv.code)}
+                                className="inline-flex items-center gap-1 rounded-lg border border-border bg-card px-2 py-1 text-[11px] font-bold text-foreground hover:bg-muted shadow-2xs transition"
+                                title="Copy invitation link"
+                              >
+                                {copiedCode === inv.code ? (
+                                  <>
+                                    <Check className="h-3 w-3 text-teal-600" />
+                                    <span className="text-teal-600">Copied</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <Copy className="h-3 w-3 text-muted-foreground" />
+                                    <span>Copy</span>
+                                  </>
+                                )}
+                              </button>
+                              {!inv.revoked && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleRevokeInvite(inv.code)}
+                                  className="rounded-lg border border-destructive/40 bg-destructive/10 px-2 py-1 text-[11px] font-bold text-destructive hover:bg-destructive/20 transition"
+                                >
+                                  Revoke
+                                </button>
+                              )}
                             </div>
-                          ) : (
-                            <span className="text-muted-foreground italic">Unclaimed (Available)</span>
-                          )}
-                        </td>
-                        <td className="px-4 py-3">
-                          {inv.revoked ? (
-                            <span className="rounded-full bg-destructive/15 px-2 py-0.5 text-[10px] font-bold text-destructive">
-                              Revoked
-                            </span>
-                          ) : inv.claimed_by_user?.discoverable ? (
-                            <span className="rounded-full bg-teal-500/15 px-2 py-0.5 text-[10px] font-bold text-teal-600 dark:text-teal-400">
-                              Stage 4: Live on Discover
-                            </span>
-                          ) : inv.claimed_by_user?.onboarded ? (
-                            <span className="rounded-full bg-teal-500/15 px-2 py-0.5 text-[10px] font-bold text-teal-600">
-                              Stage 3: Onboarded
-                            </span>
-                          ) : inv.claimed_at ? (
-                            <span className="rounded-full bg-blue-500/15 px-2 py-0.5 text-[10px] font-bold text-blue-600">
-                              Stage 2: Registered
-                            </span>
-                          ) : (
-                            <span className="rounded-full bg-action/15 px-2 py-0.5 text-[10px] font-bold text-action">
-                              Stage 1: Link Created
-                            </span>
-                          )}
-                        </td>
-                        <td className="px-4 py-3 text-muted-foreground">
-                          {new Date(inv.created_at).toLocaleDateString()}
-                        </td>
-                        <td className="px-4 py-3 text-right">
-                          {!inv.revoked && (
-                            <button
-                              onClick={() => handleRevokeInvite(inv.code)}
-                              className="rounded-lg border border-destructive/40 bg-destructive/10 px-2.5 py-1 text-[11px] font-bold text-destructive hover:bg-destructive/20"
-                            >
-                              Revoke
-                            </button>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
+                          </td>
+                        </tr>
+                      ))}
                     {invites.length === 0 && (
                       <tr>
                         <td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">
@@ -1593,14 +2145,29 @@ function AdminDashboard() {
                     return (
                       <div key={ev.id} className="rounded-2xl border border-border/80 bg-card p-4 shadow-xs space-y-3 flex flex-col justify-between">
                         <div className="space-y-2">
+                          {ev.poster_url && (
+                            <div className="h-32 w-full rounded-xl overflow-hidden bg-muted border border-border/60 relative">
+                              <img
+                                src={ev.poster_url}
+                                alt={ev.title}
+                                className="h-full w-full object-cover"
+                                onError={(e) => {
+                                  (e.target as HTMLElement).style.display = "none";
+                                }}
+                              />
+                            </div>
+                          )}
+
                           <div className="flex items-start justify-between gap-2">
-                            <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold ${
-                              isVerified
-                                ? "bg-teal-500/15 text-teal-700 dark:text-teal-300 border border-teal-500/30"
-                                : isPending
-                                ? "bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30"
-                                : "bg-muted text-muted-foreground"
-                            }`}>
+                            <span
+                              className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold ${
+                                isVerified
+                                  ? "bg-teal-500/15 text-teal-700 dark:text-teal-300 border border-teal-500/30"
+                                  : isPending
+                                  ? "bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30"
+                                  : "bg-muted text-muted-foreground"
+                              }`}
+                            >
                               {isVerified ? "✓ Verified" : isPending ? "⏳ Pending Review" : ev.verification_status}
                             </span>
                             <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">
@@ -1609,14 +2176,29 @@ function AdminDashboard() {
                           </div>
 
                           <h3 className="font-display text-base font-extrabold text-primary leading-snug">{ev.title}</h3>
-                          <p className="text-xs text-muted-foreground">📍 {ev.venue}{ev.area ? ` · ${ev.area}` : ""}, {ev.city}</p>
+                          <p className="text-xs text-muted-foreground">
+                            📍 {ev.venue}
+                            {ev.area ? ` · ${ev.area}` : ""}, {ev.city}
+                          </p>
 
                           <div className="text-[11px] text-muted-foreground space-y-0.5 pt-1">
                             {ev.start_date && (
-                              <p>📅 {ev.start_date} {ev.end_date && ev.end_date !== ev.start_date ? `to ${ev.end_date}` : ""}</p>
+                              <p>
+                                📅 {ev.start_date} {ev.end_date && ev.end_date !== ev.start_date ? `to ${ev.end_date}` : ""}
+                              </p>
                             )}
                             {ev.organizer && <p>👤 {ev.organizer}</p>}
                             {ev.ticket_price_range && <p>🎟 {ev.ticket_price_range}</p>}
+                            {ev.booking_url && (
+                              <a
+                                href={ev.booking_url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1 text-[11px] font-semibold text-action hover:underline mt-0.5"
+                              >
+                                <span>Official Booking / Tickets ↗</span>
+                              </a>
+                            )}
                             {ev.source_notes && (
                               <p className="text-[10px] italic line-clamp-2 mt-1 text-muted-foreground/80 bg-muted/40 p-1.5 rounded-lg">
                                 📝 {ev.source_notes}
@@ -1628,6 +2210,7 @@ function AdminDashboard() {
                         <div className="pt-3 border-t border-border/60 flex items-center justify-between gap-1">
                           <div className="flex items-center gap-1.5">
                             <button
+                              type="button"
                               onClick={async () => {
                                 const newVerdict = !isVerified;
                                 await verifyEvent({ data: { eventId: ev.id, verified: newVerdict } });
@@ -1651,38 +2234,49 @@ function AdminDashboard() {
                             </Link>
                           </div>
 
-                          <button
-                            onClick={() => {
-                              setEditingEvent({
-                                id: ev.id,
-                                title: ev.title,
-                                slug: ev.slug || "",
-                                venue: ev.venue,
-                                area: ev.area || "",
-                                address: ev.address || "",
-                                city: ev.city || "Raipur",
-                                state: ev.state || "Chhattisgarh",
-                                start_date: ev.start_date || "",
-                                end_date: ev.end_date || "",
-                                start_time: ev.start_time || "",
-                                end_time: ev.end_time || "",
-                                organizer: ev.organizer || "",
-                                poster_url: ev.poster_url || "",
-                                booking_url: ev.booking_url || "",
-                                ticket_price_range: ev.ticket_price_range || "",
-                                min_price_inr: ev.min_price_inr || "",
-                                price_source: ev.price_source || "",
-                                source_notes: ev.source_notes || "",
-                                verification_status: ev.verification_status || "pending_verification",
-                                publication_status: ev.publication_status || "published",
-                                is_active: ev.is_active ?? true,
-                              });
-                              setEventModalOpen(true);
-                            }}
-                            className="rounded-lg border border-border/80 px-2.5 py-1 text-[11px] font-bold text-foreground hover:bg-muted"
-                          >
-                            Edit
-                          </button>
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditingEvent({
+                                  id: ev.id,
+                                  title: ev.title,
+                                  slug: ev.slug || "",
+                                  venue: ev.venue,
+                                  area: ev.area || "",
+                                  address: ev.address || "",
+                                  city: ev.city || "Raipur",
+                                  state: ev.state || "Chhattisgarh",
+                                  start_date: ev.start_date || "",
+                                  end_date: ev.end_date || "",
+                                  start_time: ev.start_time || "",
+                                  end_time: ev.end_time || "",
+                                  organizer: ev.organizer || "",
+                                  poster_url: ev.poster_url || "",
+                                  booking_url: ev.booking_url || "",
+                                  ticket_price_range: ev.ticket_price_range || "",
+                                  min_price_inr: ev.min_price_inr || "",
+                                  price_source: ev.price_source || "",
+                                  source_notes: ev.source_notes || "",
+                                  verification_status: ev.verification_status || "pending_verification",
+                                  publication_status: ev.publication_status || "published",
+                                  is_active: ev.is_active ?? true,
+                                });
+                                setEventModalOpen(true);
+                              }}
+                              className="rounded-lg border border-border/80 px-2.5 py-1 text-[11px] font-bold text-foreground hover:bg-muted"
+                            >
+                              Edit
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setDeleteEventModal(ev)}
+                              className="rounded-lg border border-destructive/30 bg-destructive/10 p-1 text-destructive hover:bg-destructive/20 transition"
+                              title="Delete Event"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
                         </div>
                       </div>
                     );
@@ -2095,7 +2689,11 @@ function AdminDashboard() {
                 <button
                   type="button"
                   onClick={handleUserAction}
-                  className="rounded-xl bg-destructive px-4 py-2 text-xs font-bold text-white hover:opacity-90"
+                  className={`rounded-xl px-4 py-2 text-xs font-bold text-white transition hover:opacity-90 ${
+                    confirmModal.action === "suspend" || confirmModal.action === "reject"
+                      ? "bg-destructive hover:bg-destructive/90"
+                      : "bg-teal-600 hover:bg-teal-700"
+                  }`}
                 >
                   Confirm {confirmModal.action}
                 </button>
@@ -2378,6 +2976,359 @@ function AdminDashboard() {
           </DialogContent>
         </Dialog>
       )}
+      {/* User Profile Inspector Dialog */}
+      {inspectUser && (
+        <Dialog open={true} onOpenChange={() => setInspectUser(null)}>
+          <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto border-border/80 bg-background/98 p-6 shadow-2xl rounded-2xl">
+            <DialogHeader className="space-y-2">
+              <div className="flex items-center justify-between">
+                <DialogTitle className="font-display text-xl font-extrabold text-primary">
+                  User Profile Inspector
+                </DialogTitle>
+                <span
+                  className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold ${
+                    inspectUser.is_suspended
+                      ? "bg-destructive/15 text-destructive"
+                      : inspectUser.verification_status === "approved"
+                      ? "bg-teal-500/15 text-teal-600 dark:text-teal-400"
+                      : inspectUser.verification_status === "rejected"
+                      ? "bg-destructive/15 text-destructive"
+                      : "bg-amber-500/15 text-amber-600 dark:text-amber-400"
+                  }`}
+                >
+                  {inspectUser.is_suspended ? "Suspended" : inspectUser.verification_status}
+                </span>
+              </div>
+              <DialogDescription className="text-xs text-muted-foreground">
+                Detailed profile data, Dandiya verification, attendance nights, and account safety status.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-4 pt-2">
+              {/* Header card with photo and basic info */}
+              <div className="flex items-start gap-4 p-4 rounded-xl border border-border/70 bg-card">
+                <div className="h-20 w-20 rounded-2xl bg-muted overflow-hidden shrink-0 border border-border">
+                  {inspectUser.photo_path && adminPhotoUrls[inspectUser.photo_path] ? (
+                    <img
+                      src={adminPhotoUrls[inspectUser.photo_path]}
+                      alt={inspectUser.first_name || ""}
+                      className="h-full w-full object-cover"
+                      onError={(e) => {
+                        (e.target as HTMLElement).style.display = "none";
+                      }}
+                    />
+                  ) : (
+                    <div className="h-full w-full flex items-center justify-center font-bold text-xl text-muted-foreground">
+                      {inspectUser.first_name?.[0] || "?"}
+                    </div>
+                  )}
+                </div>
+                <div className="space-y-1 flex-1">
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-display text-lg font-bold text-primary">{inspectUser.first_name || "Unnamed"}</h3>
+                    {inspectUser.birth_date && (
+                      <span className="text-xs text-muted-foreground">
+                        Born {new Date(inspectUser.birth_date).toLocaleDateString()}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-foreground font-medium">{inspectUser.college || "No college specified"}</p>
+                  {inspectUser.branch && <p className="text-xs text-muted-foreground">{inspectUser.branch}</p>}
+                  <p className="text-xs text-muted-foreground">📍 {inspectUser.general_area || "Area not specified"}</p>
+                </div>
+              </div>
+
+              {/* Account identifiers & status */}
+              <div className="rounded-xl border border-border/60 bg-muted/20 p-3 space-y-2 text-xs">
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground font-medium">User ID (UID):</span>
+                  <div className="flex items-center gap-1 font-mono">
+                    <span className="text-foreground text-[11px] truncate max-w-[200px]">{inspectUser.id}</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard.writeText(inspectUser.id);
+                        toast.success("Copied User ID");
+                      }}
+                      className="p-1 hover:bg-muted rounded"
+                      title="Copy UID"
+                    >
+                      <Copy className="h-3 w-3 text-muted-foreground" />
+                    </button>
+                  </div>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground font-medium">Onboarding Status:</span>
+                  <span className="font-bold text-foreground">
+                    {inspectUser.onboarded ? "✓ Completed Onboarding" : "⏳ Incomplete Profile"}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground font-medium">Registered:</span>
+                  <span className="text-foreground">
+                    {inspectUser.created_at ? new Date(inspectUser.created_at).toLocaleString() : "Unknown"}
+                  </span>
+                </div>
+                {inspectUser.share_token && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground font-medium">Share Token:</span>
+                    <span className="font-mono text-foreground font-bold">{inspectUser.share_token}</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Bio / Prompt Response */}
+              {inspectUser.prompt_answer && (
+                <div className="rounded-xl border border-border/70 bg-card p-3.5 space-y-1">
+                  <p className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground">Prompt / Bio</p>
+                  <p className="text-xs text-foreground italic leading-relaxed">"{inspectUser.prompt_answer}"</p>
+                </div>
+              )}
+
+              {/* 9 Garba Nights attendance */}
+              <div className="rounded-xl border border-border/70 bg-card p-3.5 space-y-2">
+                <p className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground">
+                  Garba Nights Attendance Plan
+                </p>
+                <div className="grid grid-cols-9 gap-1 text-center">
+                  {Array.from({ length: 9 }, (_, i) => i + 1).map((night) => {
+                    const attending = inspectUser.nights?.[`night_${night}`];
+                    return (
+                      <div
+                        key={night}
+                        className={`rounded-lg py-1.5 text-xs font-bold ${
+                          attending
+                            ? "bg-action text-action-foreground shadow-2xs"
+                            : "bg-muted/40 text-muted-foreground/50 border border-border/40"
+                        }`}
+                        title={`Night ${night}: ${attending ? "Attending" : "Not going"}`}
+                      >
+                        N{night}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Quiz Preferences if answered */}
+              {inspectUser.quiz && Object.keys(inspectUser.quiz).length > 0 && (
+                <div className="rounded-xl border border-border/70 bg-card p-3.5 space-y-2">
+                  <p className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground">
+                    Vibe & Quiz Responses
+                  </p>
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    {Object.entries(inspectUser.quiz).map(([qKey, qVal]: [string, any]) => (
+                      <div key={qKey} className="rounded-lg bg-muted/30 p-2">
+                        <span className="text-[10px] font-bold text-muted-foreground uppercase block">{qKey}</span>
+                        <span className="font-semibold text-foreground">{String(qVal)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Action buttons inside Inspector */}
+              <div className="pt-2 flex flex-wrap items-center justify-between gap-2 border-t border-border/60">
+                <div className="flex items-center gap-2">
+                  {inspectUser.is_suspended ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setInspectUser(null);
+                        setConfirmModal({ action: "reactivate", user: inspectUser });
+                      }}
+                      className="rounded-xl border border-teal-500/40 bg-teal-500/10 px-3 py-1.5 text-xs font-bold text-teal-600 hover:bg-teal-500/20"
+                    >
+                      Reactivate Account
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setInspectUser(null);
+                        setConfirmModal({ action: "suspend", user: inspectUser });
+                      }}
+                      className="rounded-xl border border-destructive/40 bg-destructive/10 px-3 py-1.5 text-xs font-bold text-destructive hover:bg-destructive/20"
+                    >
+                      Suspend Account
+                    </button>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-2">
+                  {inspectUser.verification_status !== "approved" && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setInspectUser(null);
+                        setConfirmModal({ action: "approve", user: inspectUser });
+                      }}
+                      className="rounded-xl bg-teal-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-teal-700 shadow-xs"
+                    >
+                      Approve Verification
+                    </button>
+                  )}
+                  {inspectUser.verification_status !== "rejected" && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setInspectUser(null);
+                        setConfirmModal({ action: "reject", user: inspectUser });
+                      }}
+                      className="rounded-xl border border-border px-3 py-1.5 text-xs font-semibold text-muted-foreground hover:bg-muted"
+                    >
+                      Reject Verification
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {/* Generate VIP Referral Invite Modal */}
+      {createInviteModal && (
+        <Dialog open={true} onOpenChange={() => setCreateInviteModal(false)}>
+          <DialogContent className="max-w-md border-border/80 bg-background/98 p-6 shadow-2xl rounded-2xl">
+            <DialogHeader className="space-y-1">
+              <DialogTitle className="font-display text-lg font-extrabold text-primary">
+                Generate Admin VIP Invite
+              </DialogTitle>
+              <DialogDescription className="text-xs text-muted-foreground">
+                Create a VIP invitation token that bypasses early waiting rooms and attributes registration to your admin account.
+              </DialogDescription>
+            </DialogHeader>
+
+            <form onSubmit={handleCreateInvite} className="space-y-4 pt-2">
+              <div>
+                <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1 block">
+                  Custom Invite Code (Optional)
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. VIPGARBA2026 or leave blank for auto"
+                  value={customInviteCode}
+                  onChange={(e) => setCustomInviteCode(e.target.value.toUpperCase())}
+                  className="w-full rounded-xl border border-border bg-card px-3.5 py-2.5 text-xs font-mono font-bold uppercase text-foreground outline-none focus:border-action focus:ring-1 focus:ring-action"
+                />
+                <p className="text-[11px] text-muted-foreground mt-1">
+                  Leave blank to automatically generate a secure 8-character alphanumeric token.
+                </p>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setCreateInviteModal(false)}
+                  className="rounded-xl border border-border px-3.5 py-2 text-xs font-semibold text-muted-foreground hover:bg-muted"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={creatingInvite}
+                  className="rounded-xl bg-action px-4 py-2 text-xs font-bold text-action-foreground shadow-xs hover:opacity-90 disabled:opacity-50"
+                >
+                  {creatingInvite ? "Generating…" : "Create Invite Token"}
+                </button>
+              </div>
+            </form>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {/* Delete Event Confirmation Modal */}
+      {deleteEventModal && (
+        <Dialog open={true} onOpenChange={() => setDeleteEventModal(null)}>
+          <DialogContent className="max-w-md border-border/80 bg-background/98 p-6 shadow-2xl rounded-2xl">
+            <DialogHeader className="space-y-1">
+              <div className="flex items-center gap-2 text-destructive">
+                <Trash2 className="h-5 w-5" />
+                <DialogTitle className="font-display text-lg font-extrabold">
+                  Delete Event Listing?
+                </DialogTitle>
+              </div>
+              <DialogDescription className="text-xs text-muted-foreground">
+                This will permanently delete the venue listing for <b className="text-foreground">{deleteEventModal.title}</b>. This action cannot be undone.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="rounded-xl border border-destructive/30 bg-destructive/10 p-3 my-2 text-xs text-destructive">
+              Are you sure you want to remove this event from public and community discoverability?
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setDeleteEventModal(null)}
+                className="rounded-xl border border-border px-3.5 py-2 text-xs font-semibold text-muted-foreground hover:bg-muted"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => handleDeleteEvent(deleteEventModal.id)}
+                className="rounded-xl bg-destructive px-4 py-2 text-xs font-bold text-destructive-foreground hover:opacity-90"
+              >
+                Yes, Delete Event
+              </button>
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {/* Resolve Report Modal */}
+      {resolveReportModal && (
+        <Dialog open={true} onOpenChange={() => setResolveReportModal(null)}>
+          <DialogContent className="max-w-md border-border/80 bg-background/98 p-6 shadow-2xl rounded-2xl">
+            <DialogHeader className="space-y-1">
+              <DialogTitle className="font-display text-lg font-extrabold text-primary">
+                {resolveReportModal.status === "resolved" ? "Mark Report as Resolved" : "Dismiss Report"}
+              </DialogTitle>
+              <DialogDescription className="text-xs text-muted-foreground">
+                Record an audit note regarding this safety complaint action.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-3 pt-2">
+              <div>
+                <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1 block">
+                  Moderator Audit Note (Optional)
+                </label>
+                <textarea
+                  rows={3}
+                  placeholder="e.g. Profile reviewed, warned user / false alarm dismissal…"
+                  value={modNote}
+                  onChange={(e) => setModNote(e.target.value)}
+                  className="w-full rounded-xl border border-border bg-card p-3 text-xs outline-none focus:border-action focus:ring-1 focus:ring-action"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setResolveReportModal(null)}
+                  className="rounded-xl border border-border px-3.5 py-2 text-xs font-semibold text-muted-foreground hover:bg-muted"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleResolveReport(resolveReportModal.report, resolveReportModal.status, modNote)}
+                  className={`rounded-xl px-4 py-2 text-xs font-bold text-white transition ${
+                    resolveReportModal.status === "resolved"
+                      ? "bg-teal-600 hover:bg-teal-700"
+                      : "bg-muted-foreground hover:bg-foreground"
+                  }`}
+                >
+                  Confirm {resolveReportModal.status === "resolved" ? "Resolution" : "Dismissal"}
+                </button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   );
 }
@@ -2387,21 +3338,29 @@ function MetricCard({
   value,
   subtitle,
   highlight = false,
+  onClick,
 }: {
   title: string;
   value: any;
   subtitle?: string;
   highlight?: boolean;
+  onClick?: () => void;
 }) {
   return (
     <div
+      onClick={onClick}
       className={`rounded-2xl border p-4 shadow-xs space-y-1 transition ${
+        onClick ? "cursor-pointer hover:border-action/60 hover:shadow-md hover:scale-[1.01]" : ""
+      } ${
         highlight
           ? "border-amber-500/50 bg-amber-500/10"
           : "border-border/80 bg-card"
       }`}
     >
-      <p className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">{title}</p>
+      <div className="flex items-center justify-between">
+        <p className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">{title}</p>
+        {onClick && <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />}
+      </div>
       <p className="text-2xl font-black text-primary font-display">{value ?? 0}</p>
       {subtitle && <p className="text-[11px] text-muted-foreground">{subtitle}</p>}
     </div>

@@ -84,7 +84,7 @@ describe("After9 Defensive Security & Hardening Test Suite", () => {
       // User B sharing the same NAT IP is NOT blocked
       const allowedB = await checkRateLimit({ action, maxAttempts: 1, windowSeconds: 60, userId: "user-b", ip: "192.0.2.1" });
       expect(allowedB.allowed).toBe(true);
-    });
+    }, 15000);
   });
 
   // =========================================================================

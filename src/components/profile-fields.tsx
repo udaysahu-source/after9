@@ -295,12 +295,20 @@ export function PhotoPicker({ userId, url, onUploaded, onRemove }: { userId: str
     if (!/^image\/(jpeg|png|webp)$/.test(f.type)) return setErr("Use a JPG, PNG or WebP photo.");
     if (f.size > 10 * 1024 * 1024) return setErr("That photo is over 10 MB.");
     const img = new Image();
+    const objectUrl = URL.createObjectURL(f);
     img.onload = () => {
+      URL.revokeObjectURL(objectUrl);
       if (img.width < 400 || img.height < 400) return setErr("Photo needs to be at least 400px on each side.");
-      const c = document.createElement("canvas"); c.width = 900; c.height = 1200;
+      const c = document.createElement("canvas");
+      c.width = 900;
+      c.height = 1200;
+      const ctx = c.getContext("2d");
+      if (!ctx) return setErr("We couldn't process that photo.");
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = "high";
       const r = Math.max(900 / img.width, 1200 / img.height);
       const w = img.width * r, h = img.height * r;
-      c.getContext("2d")!.drawImage(img, (900 - w) / 2, (1200 - h) / 2, w, h);
+      ctx.drawImage(img, (900 - w) / 2, (1200 - h) / 2, w, h);
       c.toBlob(async (blob) => {
         if (!blob) return setErr("We couldn't process that photo.");
         setBusy(true);
@@ -311,8 +319,11 @@ export function PhotoPicker({ userId, url, onUploaded, onRemove }: { userId: str
         onUploaded(path, URL.createObjectURL(blob));
       }, "image/jpeg", 0.82);
     };
-    img.onerror = () => setErr("That file isn't a readable image.");
-    img.src = URL.createObjectURL(f);
+    img.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      setErr("That file isn't a readable image.");
+    };
+    img.src = objectUrl;
   };
   return (
     <div className="flex flex-col items-center">

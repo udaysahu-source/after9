@@ -821,6 +821,51 @@ export type Database = {
           },
         ]
       }
+      match_social_consents: {
+        Row: {
+          id: string
+          user_id: string
+          match_id: string
+          platform: string
+          consented: boolean
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          match_id: string
+          platform?: string
+          consented?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          match_id?: string
+          platform?: string
+          consented?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "match_social_consents_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "match_social_consents_match_id_fkey"
+            columns: ["match_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       notifications: {
         Row: {
           action_url: string
@@ -957,6 +1002,30 @@ export type Database = {
         }
         Relationships: []
       }
+      discovery_impressions: {
+        Row: {
+          id: string
+          viewer_id: string
+          profile_id: string
+          batch_id: string | null
+          served_at: string
+        }
+        Insert: {
+          id?: string
+          viewer_id: string
+          profile_id: string
+          batch_id?: string | null
+          served_at?: string
+        }
+        Update: {
+          id?: string
+          viewer_id?: string
+          profile_id?: string
+          batch_id?: string | null
+          served_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
@@ -1001,6 +1070,30 @@ export type Database = {
       get_matched_socials: {
         Args: { target_user_id: string }
         Returns: Json
+      }
+      get_match_social_exchange: {
+        Args: {
+          _target_user_id: string
+          _platform?: string
+        }
+        Returns: {
+          is_match: boolean
+          my_consent: boolean
+          partner_consent: boolean
+          both_consented: boolean
+          partner_handle: string | null
+          partner_url: string | null
+          my_handle: string | null
+          my_url: string | null
+        }
+      }
+      set_match_social_consent: {
+        Args: {
+          _target_user_id: string
+          _platform?: string
+          _consent?: boolean
+        }
+        Returns: boolean
       }
       regenerate_share_token: {
         Args: Record<PropertyKey, never>
@@ -1128,6 +1221,42 @@ export type Database = {
           story_joins: number
           story_opens: number
         }[]
+      }
+      record_discovery_impressions: {
+        Args: {
+          p_profile_ids: string[]
+          p_batch_id?: string | null
+        }
+        Returns: number
+      }
+      get_admin_discovery_balance_metrics: {
+        Args: never
+        Returns: {
+          eligible_pool_size: number
+          active_discoverable_24h: number
+          active_discoverable_7d: number
+          exposure_distribution: {
+            p10: number
+            p25: number
+            median_p50: number
+            p75: number
+            p90: number
+            max: number
+            avg: number
+          }
+          repeated_exposure_rate: number
+          feed_exhaustion_rate: number
+          positive_swipe_rate: number
+          mutual_matches_7d: number
+          gender_breakdown: {
+            gender: string
+            is_suppressed: boolean
+            eligible_count: number | null
+            impressions_7d: number | null
+            privacy_note: string | null
+          }[]
+          min_cohort_threshold: number
+        }
       }
     }
     Enums: {

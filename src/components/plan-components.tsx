@@ -133,6 +133,7 @@ export function EventCard({
 }) {
   const isVerified = event.verification_status === "verified";
   const hasPasses = event.has_valid_booking_url;
+  const [posterError, setPosterError] = useState(false);
 
   const handleShare = async (e: React.MouseEvent) => {
     e.preventDefault();
@@ -158,7 +159,7 @@ export function EventCard({
     <div className="group relative flex flex-col rounded-3xl border border-border/80 bg-card overflow-hidden shadow-xs card-hover-lift hover:border-action/60 hover:shadow-md transition-all duration-200">
       {/* Top Banner / Poster Area (Aspect 16:9 to eliminate Cumulative Layout Shift) */}
       <div className="relative aspect-[16/9] w-full overflow-hidden bg-gradient-to-br from-plum-900 via-primary to-plum-950 flex items-center justify-center">
-        {event.poster_url ? (
+        {event.poster_url && !posterError ? (
           <img
             src={event.poster_url}
             alt={event.title}
@@ -167,6 +168,7 @@ export function EventCard({
             decoding="async"
             width={640}
             height={360}
+            onError={() => setPosterError(true)}
           />
         ) : (
           <div className="flex flex-col items-center justify-center p-6 text-center text-ivory/90">

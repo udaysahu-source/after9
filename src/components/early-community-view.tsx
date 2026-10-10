@@ -12,7 +12,7 @@ import {
   AlertCircle,
   Camera,
 } from "lucide-react";
-import { NIGHTS, goingNights, type ProfileRow } from "@/lib/after9";
+import { NIGHTS, goingNights, usePhotoUrls, type ProfileRow } from "@/lib/after9";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 
@@ -30,6 +30,8 @@ export function EarlyCommunityView({
   onProfileUpdated,
 }: EarlyCommunityViewProps) {
   const [savingNight, setSavingNight] = useState<number | null>(null);
+  const photoUrls = usePhotoUrls([userProfile?.photo_path]);
+  const resolvedPhotoUrl = userProfile?.photo_path ? photoUrls[userProfile.photo_path] : null;
 
   // Active nights for current user
   const userNights = userProfile ? goingNights(userProfile.nights) : [];
@@ -243,10 +245,10 @@ export function EarlyCommunityView({
 
             <div className="flex items-center gap-3">
               <div className="h-16 w-16 shrink-0 overflow-hidden rounded-xl border border-white/20 bg-primary/20">
-                {userProfile.photo_path ? (
+                {resolvedPhotoUrl ? (
                   <img
-                    src={`${userProfile.photo_path}`}
-                    alt={userProfile.first_name || "Profile"}
+                    src={resolvedPhotoUrl}
+                    alt={userProfile?.first_name || "Profile"}
                     className="h-full w-full object-cover"
                     onError={(e) => {
                       (e.target as HTMLElement).style.display = "none";
@@ -254,7 +256,7 @@ export function EarlyCommunityView({
                   />
                 ) : (
                   <div className="flex h-full w-full items-center justify-center font-display text-xl font-black text-amber-300">
-                    {(userProfile.first_name || "A").slice(0, 1)}
+                    {(userProfile?.first_name || "A").slice(0, 1)}
                   </div>
                 )}
               </div>

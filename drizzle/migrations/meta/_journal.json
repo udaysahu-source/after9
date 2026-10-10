@@ -120,6 +120,48 @@
       "when": 1791538000000,
       "tag": "0016_plan_tab_and_raipur_garba_events",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1791539000000,
+      "tag": "0017_performance_optimization_indexes_and_rls",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1791540000000,
+      "tag": "0018_storage_photos_security_and_events_policy_cleanup",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1791541000000,
+      "tag": "0019_fair_discover_balancing_and_exposure_metrics",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1791542000000,
+      "tag": "0020_social_links_visibility_fix",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1791543000000,
+      "tag": "0021_match_social_consents_and_exchange_rpc",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1791544000000,
+      "tag": "0022_fix_admin_users_recursion",
+      "breakpoints": true
     }
   ]
 }

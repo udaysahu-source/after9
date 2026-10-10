@@ -296,6 +296,9 @@ function NoEligibleForNightState({
           <h2 className="font-display text-2xl font-extrabold text-primary">
             Nobody on the floor for Night {night} yet.
           </h2>
+          <p className="text-xs font-semibold text-action">
+            Your Garba circle is growing. Try another night.
+          </p>
           <p className="text-xs text-muted-foreground leading-relaxed">
             Dancers have selected other festival nights! Check the full lineup or rally your friends
             specifically for Night {night}.
@@ -354,6 +357,9 @@ function FiltersRestrictiveState({
           <h2 className="font-display text-2xl font-extrabold text-primary">
             No one matches your filters.
           </h2>
+          <p className="text-xs font-semibold text-primary/90">
+            No profiles match your preferences right now.
+          </p>
           <p className="text-xs text-muted-foreground leading-relaxed">
             {total > 0 ? (
               <>
